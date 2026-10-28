@@ -64,32 +64,33 @@ object MapStyle {
         routeCasing = "#10a06c",
     )
 
+    // Deň ako navigácia AMap: svetlomodrý podklad, pri jazde tmavomodré cesty so svetlým okrajom.
     private val DAY = Palette(
-        background = "#f2f3f5",
-        backgroundNear = "#eef0f2",
-        residential = "#eceef1",
-        residentialNear = "#e7e9ed",
-        park = "#cdeac9",
-        wood = "#c1e2bd",
-        water = "#a5cbf5",
-        building = "#e1e3e8",
-        path = "#d9dce2",
+        background = "#e6edf5",
+        backgroundNear = "#d8e4f1",
+        residential = "#e0e8f1",
+        residentialNear = "#d0deed",
+        park = "#cbe9d6",
+        wood = "#bfe3cc",
+        water = "#a9d5f3",
+        building = "#d3deea",
+        path = "#c3cfdd",
         minor = "#ffffff",
         major = "#ffffff",
         motorway = "#ffd77d",
-        asphaltNear = null,
-        edgeNear = null,
-        casing = "#d0d4db",
-        motorwayCasing = "#e3ad46",
-        centerLine = "#e5b93a",
-        building3d = "#dcdfe5",
-        rail = "#c7cbd2",
-        boundary = "#9aa0aa",
-        roadLabel = "#4b5059",
+        asphaltNear = "#18233a",
+        edgeNear = "#f4f7fb",
+        casing = null,
+        motorwayCasing = null,
+        centerLine = "#f2cf3d",
+        building3d = "#cad6e4",
+        rail = "#b9c4d2",
+        boundary = "#8f99a8",
+        roadLabel = "#3d4552",
         placeLabel = "#262a31",
         halo = "#ffffff",
-        route = "#1fbf8a",
-        routeCasing = "#0e8f62",
+        route = "#16cc8c",
+        routeCasing = "#0b8a63",
     )
 
     private const val EMPTY = """{"type":"FeatureCollection","features":[]}"""
@@ -139,23 +140,24 @@ object MapStyle {
      */
     fun json(dark: Boolean, trafficKey: String? = null): String {
         val c = if (dark) NIGHT else DAY
-        // Od priblíženia 18 sa šírka zdvojnásobuje s každým stupňom ako skutočná cesta.
-        val motorwayStops = arrayOf<Pair<Number, Number>>(5 to 0.6, 10 to 2.2, 14 to 8, 18 to 32, 19 to 62, 20 to 122)
-        val majorStops = arrayOf<Pair<Number, Number>>(8 to 0.5, 12 to 2.2, 15 to 9, 18 to 28, 19 to 54, 20 to 106)
-        val secondaryStops = arrayOf<Pair<Number, Number>>(10 to 0.5, 13 to 2.4, 15 to 7, 18 to 24, 19 to 46, 20 to 90)
-        val minorStops = arrayOf<Pair<Number, Number>>(13 to 0.6, 15 to 4.5, 18 to 18, 19 to 34, 20 to 66)
-        val serviceStops = arrayOf<Pair<Number, Number>>(14 to 0.5, 16 to 2.5, 18 to 9, 19 to 17, 20 to 33)
+        // Od priblíženia 17 majú cesty skutočnú šírku (diaľnica 11 m na smer, hlavná 10 m, vedľajšia 8 m,
+        // miestna 6,5 m, obslužná 4 m) a s každým stupňom sa zdvojnásobujú – ako v AMap pri jazde.
+        val motorwayStops = arrayOf<Pair<Number, Number>>(5 to 0.6, 10 to 2.2, 14 to 8, 16 to 15.4, 17 to 27.8, 18 to 55.6, 19 to 111, 20 to 222)
+        val majorStops = arrayOf<Pair<Number, Number>>(8 to 0.5, 12 to 2.2, 15 to 9, 16 to 13, 17 to 25.3, 18 to 50.6, 19 to 101, 20 to 202)
+        val secondaryStops = arrayOf<Pair<Number, Number>>(10 to 0.5, 13 to 2.4, 15 to 7, 16 to 10.6, 17 to 20.2, 18 to 40.4, 19 to 81, 20 to 162)
+        val minorStops = arrayOf<Pair<Number, Number>>(13 to 0.6, 15 to 4.5, 16 to 8.2, 17 to 16.4, 18 to 32.9, 19 to 65.7, 20 to 131)
+        val serviceStops = arrayOf<Pair<Number, Number>>(14 to 0.5, 16 to 3.5, 17 to 10.1, 18 to 20.2, 19 to 40.4, 20 to 81)
         val serviceW = width(*serviceStops)
         // Priechod pre chodcov: 6 pruhov pozdĺž cesty na ~90 % jej šírky podľa triedy cesty, aby nepresahoval cez okraj.
         // [perBar] = násobí sa vlastnosťou „f“ (poloha pruhu od stredu cesty ako podiel šírky priechodu).
         fun byRoad(scale: Double, perBar: Boolean) = """["interpolate",["exponential",1.5],["zoom"],""" +
-            listOf(16, 18, 19, 20).joinToString(",") { z ->
+            listOf(16, 17, 18, 19, 20).joinToString(",") { z ->
                 fun w(stops: Array<Pair<Number, Number>>) = Math.round(widthAt(stops, z.toDouble()) * scale * 1000) / 1000.0
                 val match = """["match",["get","c"],"major",${w(majorStops)},"secondary",${w(secondaryStops)},""" +
                     """"service",${w(serviceStops)},${w(minorStops)}]"""
                 "$z," + if (perBar) """["*",["get","f"],$match]""" else match
             } + "]"
-        val zebraColor = if (dark) "#f4f6f8" else "#d0d5dd"
+        val zebraColor = "#f4f6f8"
 
         // V noci: pri jazde tmavý asfalt so svetlými okrajmi, pri oddialení modrosivé cesty.
         val near = c.asphaltNear
@@ -190,15 +192,15 @@ object MapStyle {
                 """{"id":"center-line","type":"line","source":"omt","source-layer":"transportation","minzoom":16,
                 "filter":["all",["match",["get","class"],["primary","secondary","tertiary","minor"],true,false],
                   ["!=",["get","oneway"],1],$NOT_TUNNEL],
-                "paint":{"line-color":"${c.centerLine}","line-width":${linear(16 to 0.8, 18 to 2)},"line-dasharray":[5,4]}}"""
+                "paint":{"line-color":"${c.centerLine}","line-width":${linear(16 to 1, 18 to 2.5, 20 to 6)},"line-dasharray":[5,4]}}"""
             )
             // Biele prerušované čiary medzi jazdnými pruhmi na diaľniciach a rýchlostných cestách.
             add(
                 """{"id":"lane-divider","type":"line","source":"omt","source-layer":"transportation","minzoom":15,
                 "filter":["all",["!=",["get","ramp"],1],$NOT_TUNNEL,
                   ["any",["==",["get","class"],"motorway"],["all",["==",["get","class"],"trunk"],["==",["get","oneway"],1]]]],
-                "paint":{"line-color":"${if (dark) "#e6e9ef" else "#c2c7cf"}","line-opacity":0.8,
-                  "line-width":${linear(15 to 0.8, 18 to 2)},"line-dasharray":[6,6]}}"""
+                "paint":{"line-color":"#e6e9ef","line-opacity":0.8,
+                  "line-width":${linear(15 to 0.8, 18 to 2.5, 20 to 6)},"line-dasharray":[6,6]}}"""
             )
             add(
                 """{"id":"rail","type":"line","source":"omt","source-layer":"transportation","minzoom":12,
@@ -276,10 +278,10 @@ object MapStyle {
 
             // Cesta, po ktorej vedie trasa, zvýraznená tyrkysovou (ako v AMap) – najviac na šírku cesty.
             add(
-                """{"id":"route-corridor","type":"line","source":"route","minzoom":12,
+                """{"id":"route-corridor","type":"line","source":"route","minzoom":12,"maxzoom":16.5,
                 "layout":{"line-cap":"round","line-join":"round"},
-                "paint":{"line-color":"${if (dark) "#2b5654" else "#cde8e1"}","line-opacity":0.8,
-                  "line-width":${width(12 to 2, 13 to 2.5, 15 to 5, 18 to 18, 19 to 34, 20 to 66)}}}"""
+                "paint":{"line-color":"#2b5654","line-opacity":0.8,
+                  "line-width":${width(12 to 2, 13 to 2.5, 15 to 4.2, 16 to 7.5, 17 to 15, 18 to 30, 19 to 60, 20 to 121)}}}"""
             )
 
             // Trasa so svetlým žiarom pri aute a bielymi šípkami v smere jazdy.
@@ -287,20 +289,20 @@ object MapStyle {
                 """{"id":"route-casing","type":"line","source":"route",
                 "layout":{"line-cap":"round","line-join":"round"},
                 "paint":{"line-color":${trafficColor(c.routeCasing, "#b89100", "#b3261e", "#6b0d14")},
-                  "line-width":${linear(5 to 4, 12 to 6.5, 15 to 7, 16 to 7.5, 17 to 11, 18 to 16.5, 19 to 31, 20 to 60)}}}"""
+                  "line-width":${linear(5 to 4, 12 to 6.5, 15 to 7, 16 to 7.5, 17 to 11, 18 to 19.5, 19 to 38, 20 to 76)}}}"""
             )
             add(
                 """{"id":"route-line","type":"line","source":"route",
                 "layout":{"line-cap":"round","line-join":"round"},
                 "paint":{"line-color":${trafficColor(c.route, "#f5c518", "#f2453d", "#9b1622")},
-                  "line-width":${linear(5 to 2.5, 12 to 4.5, 15 to 5, 16 to 6, 17 to 9, 18 to 14, 19 to 27, 20 to 54)}}}"""
+                  "line-width":${linear(5 to 2.5, 12 to 4.5, 15 to 5, 16 to 6, 17 to 9, 18 to 16.5, 19 to 33, 20 to 66)}}}"""
             )
             // Svetlé pruhy, ktoré plynú po trase v smere jazdy (mapa ich posúva, pozri NavMap).
             add(
                 """{"id":"route-flow","type":"line","source":"route",
                 "layout":{"line-cap":"butt","line-join":"round"},
                 "paint":{"line-color":"#ffffff","line-opacity":0.38,"line-dasharray":[0,4,3],
-                  "line-width":${linear(5 to 1.2, 12 to 2.2, 15 to 2.5, 16 to 3, 17 to 4.5, 18 to 7, 19 to 13.5, 20 to 27)}}}"""
+                  "line-width":${linear(5 to 1.2, 12 to 2.2, 15 to 2.5, 16 to 3, 17 to 4.5, 18 to 8.2, 19 to 16.5, 20 to 33)}}}"""
             )
             // Pri veľkom priblížení tmavá medzera medzi pruhmi trasy a čiary cesty nad trasou (ako v AMap).
             add(
@@ -313,14 +315,14 @@ object MapStyle {
                 """{"id":"route-center-line","type":"line","source":"omt","source-layer":"transportation","minzoom":16,
                 "filter":["all",["match",["get","class"],["primary","secondary","tertiary","minor"],true,false],
                   ["!=",["get","oneway"],1],$NOT_TUNNEL],
-                "paint":{"line-color":"${c.centerLine}","line-width":${linear(16 to 0.8, 18 to 2, 20 to 4)},"line-dasharray":[5,4]}}"""
+                "paint":{"line-color":"${c.centerLine}","line-width":${linear(16 to 1, 18 to 2.5, 20 to 6)},"line-dasharray":[5,4]}}"""
             )
             add(
                 """{"id":"route-lane-divider","type":"line","source":"omt","source-layer":"transportation","minzoom":16,
                 "filter":["all",["!=",["get","ramp"],1],$NOT_TUNNEL,
                   ["any",["==",["get","class"],"motorway"],["all",["==",["get","class"],"trunk"],["==",["get","oneway"],1]]]],
-                "paint":{"line-color":"${if (dark) "#e6e9ef" else "#c2c7cf"}","line-opacity":0.8,
-                  "line-width":${linear(16 to 1, 18 to 2, 20 to 4)},"line-dasharray":[6,6]}}"""
+                "paint":{"line-color":"#e6e9ef","line-opacity":0.8,
+                  "line-width":${linear(16 to 1, 18 to 2.5, 20 to 6)},"line-dasharray":[6,6]}}"""
             )
             // Priechody pre chodcov nad trasou (trasa ich neprekrýva, ako v AMap): každý pruh je krátka čiara
             // pozdĺž cesty posunutá od jej stredu, šírky podľa cesty – ani v 3D nepresahujú cez okraj cesty.
@@ -333,7 +335,7 @@ object MapStyle {
             add(
                 """{"id":"route-glow","type":"line","source":"route-head",
                 "layout":{"line-cap":"round","line-join":"round"},
-                "paint":{"line-width":${linear(12 to 4, 15 to 5, 16 to 6, 17 to 9, 18 to 14, 19 to 27, 20 to 54)},
+                "paint":{"line-width":${linear(12 to 4, 15 to 5, 16 to 6, 17 to 9, 18 to 16.5, 19 to 33, 20 to 66)},
                   "line-gradient":["interpolate",["linear"],["line-progress"],0,"rgba(255,255,255,0.95)",0.6,"rgba(200,255,235,0.45)",1,"rgba(34,211,154,0)"]}}"""
             )
             add(
@@ -385,7 +387,7 @@ object MapStyle {
                 "filter":["match",["get","class"],["motorway","trunk","primary","secondary","tertiary","minor","service"],true,false],
                 "layout":{"symbol-placement":"line","text-field":$NAME,"text-font":["Noto Sans Regular"],
                   "text-size":${linear(13 to 11, 16 to 14, 18 to 17)},"text-letter-spacing":0.04,"text-max-angle":30},
-                "paint":{"text-color":"${c.roadLabel}","text-halo-color":${color(c.halo, if (dark) c.asphaltNear else null)},"text-halo-width":1.6}}"""
+                "paint":{"text-color":${color(c.roadLabel, if (dark) null else "#eef2f8")},"text-halo-color":${color(c.halo, c.asphaltNear)},"text-halo-width":1.6}}"""
             )
             add(
                 """{"id":"water-label","type":"symbol","source":"omt","source-layer":"water_name","minzoom":11,

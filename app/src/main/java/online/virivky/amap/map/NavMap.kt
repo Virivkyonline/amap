@@ -293,7 +293,7 @@ class NavMap(
     fun recenter() {
         setFollow(true)
         userZoomAt = 0L
-        if (isNavigating()) navZoom = 17.0
+        if (isNavigating()) navZoom = 18.0
         else freeZoom = freeZoom.coerceAtLeast(15.0)
         catchUp = true
         update()
@@ -367,7 +367,7 @@ class NavMap(
             s.getSourceAs<GeoJsonSource>("route-head")?.setGeoJson(
                 if (route != null && progress != null && navigating) {
                     val from = shownAlong ?: progress.traveled
-                    lineString(route.slice(from, from + 70))
+                    lineString(route.slice(from, from + 30))
                 } else {
                     EMPTY
                 }
@@ -688,7 +688,7 @@ class NavMap(
         if (width == 0 || height == 0) return
         if (navigating && !wasNavigating) {
             setFollow(true)
-            navZoom = 17.0
+            navZoom = 18.0
             catchUp = true
         }
         if (!navigating && wasNavigating) {
@@ -708,20 +708,21 @@ class NavMap(
             // Vo vyššej rýchlosti viac oddialiť a nakloniť, aby bolo vidieť ďalej dopredu.
             val speed = (NavigationController.speedKmh ?: 0).toDouble()
             if (android.os.SystemClock.elapsedRealtime() - userZoomAt > 20_000) {
-                var zoom = (17.3 - (speed - 40).coerceAtLeast(0.0) / 55).coerceIn(15.6, 17.3)
+                // Blízko ako AMap: v meste (do 30 km/h) priblíženie 18,6, na diaľnici (130 km/h) 16,2.
+                var zoom = (18.6 - (speed - 30).coerceAtLeast(0.0) * 0.024).coerceIn(16.0, 18.6)
                 // Pred odbočkou či zjazdom postupne priblížiť, aby bola križovatka dobre vidieť.
                 val p = NavigationController.progress
                 val step = if (p != null && route != null) route.steps[p.nextStepIndex] else null
                 if (p != null && step != null && step.type != "arrive" && step.modifier != "straight") {
                     val k = ((700 - p.distanceToNextStep) / 600).coerceIn(0.0, 1.0)
-                    zoom += (17.8 - zoom).coerceAtLeast(0.0) * k
+                    zoom += (18.6 - zoom).coerceAtLeast(0.0) * k
                 }
                 // Pri pohľade na pruhy bližšie, aby boli pruhy dobre vidieť.
-                if (shownLanes.isNotEmpty()) zoom = max(zoom, 18.7)
+                if (shownLanes.isNotEmpty()) zoom = max(zoom, 18.9)
                 navZoom = zoom
             }
             navTilt = if (Settings.mapPerspective == MapPerspective.THREE_D) {
-                (40 + (speed - 30).coerceAtLeast(0.0) * 0.3).coerceIn(40.0, 58.0)
+                (52 + (speed - 30).coerceAtLeast(0.0) * 0.1).coerceIn(52.0, 60.0)
             } else {
                 0.0
             }
