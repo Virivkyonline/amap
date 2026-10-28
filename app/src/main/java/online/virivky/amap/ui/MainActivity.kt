@@ -27,6 +27,7 @@ import android.graphics.Typeface
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
+import android.view.WindowManager
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.widget.Button
@@ -642,9 +643,9 @@ class MainActivity : Activity() {
                         Favorites.set(kind, place)
                         Toast.makeText(this, "Uložené: ${kind.label}", Toast.LENGTH_SHORT).show()
                     }
-                    2 -> {
-                        SavedPlaces.add(place.name, place.point)
-                        Toast.makeText(this, "Uložené do Mojich miest: ${place.name}", Toast.LENGTH_SHORT).show()
+                    2 -> askName("Uložiť do Mojich miest", place.name) { name ->
+                        val saved = SavedPlaces.add(name, place.point)
+                        Toast.makeText(this, "Uložené do Mojich miest: ${saved.name}", Toast.LENGTH_SHORT).show()
                     }
                     3 -> {
                         Recents.remove(place)
@@ -680,27 +681,46 @@ class MainActivity : Activity() {
             Toast.makeText(this, "Čakám na polohu GPS…", Toast.LENGTH_SHORT).show()
             return
         }
-        val input = EditText(this).apply {
-            setSingleLine()
-            setText("Miesto " + LocalDateTime.now().format(DateTimeFormatter.ofPattern("d. M. HH:mm")))
-            setSelectAllOnFocus(true)
-        }
         val age = (System.currentTimeMillis() - location.time) / 1000
         val info = buildList {
             if (location.hasAccuracy()) add("Presnosť polohy ±${location.accuracy.toInt()} m")
             if (age > 120) add("Poloha je ${age / 60} min stará – počkaj na GPS pod holým nebom.")
         }.joinToString("\n")
-        AlertDialog.Builder(this)
-            .setTitle("Uložiť miesto, kde som")
-            .setMessage(info.ifEmpty { null })
+        val initial = "Miesto " + LocalDateTime.now().format(DateTimeFormatter.ofPattern("d. M. HH:mm"))
+        askName("Uložiť miesto, kde som", initial, info.ifEmpty { null }) { name ->
+            val saved = SavedPlaces.add(name, GeoPoint(location))
+            Toast.makeText(this, "Uložené: ${saved.name}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /**
+     * Pole na názov: navrhnutý názov je označený a klávesnica hneď otvorená, takže stačí písať
+     * (prepíše ho), alebo len potvrdiť. Aj „Hotovo“ na klávesnici uloží.
+     */
+    private fun askName(title: String, initial: String, message: String? = null, onSave: (String) -> Unit) {
+        val input = EditText(this).apply {
+            setSingleLine()
+            setText(initial)
+            imeOptions = EditorInfo.IME_ACTION_DONE
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+        }
+        val dialog = AlertDialog.Builder(this)
+            .setTitle(title)
+            .setMessage(message)
             .setView(padded(input))
-            .setPositiveButton("Uložiť") { _, _ ->
-                val saved = SavedPlaces.add(input.text.toString().trim(), GeoPoint(location))
-                Toast.makeText(this, "Uložené: ${saved.name}", Toast.LENGTH_SHORT).show()
-            }
+            .setPositiveButton("Uložiť") { _, _ -> onSave(input.text.toString().trim().ifEmpty { initial }) }
             .setNegativeButton("Zrušiť", null)
-            .show()
+            .create()
+        input.setOnEditorActionListener { _, action, _ ->
+            if (action != EditorInfo.IME_ACTION_DONE) return@setOnEditorActionListener false
+            onSave(input.text.toString().trim().ifEmpty { initial })
+            dialog.dismiss()
+            true
+        }
+        dialog.window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE)
+        dialog.show()
         input.requestFocus()
+        input.selectAll()
     }
 
     /** Čo s uloženým miestom: navigovať pešo či autom, ukázať, premenovať, zdieľať, odstrániť. */
@@ -713,19 +733,7 @@ class MainActivity : Activity() {
                     0 -> choose(saved.toPlace(), TravelMode.FOOT)
                     1 -> choose(saved.toPlace(), TravelMode.CAR)
                     2 -> navMap?.showPoint(saved.point)
-                    3 -> {
-                        val input = EditText(this).apply {
-                            setSingleLine()
-                            setText(saved.name)
-                            setSelectAllOnFocus(true)
-                        }
-                        AlertDialog.Builder(this)
-                            .setTitle("Premenovať")
-                            .setView(padded(input))
-                            .setPositiveButton("Uložiť") { _, _ -> SavedPlaces.rename(saved.id, input.text.toString().trim()) }
-                            .setNegativeButton("Zrušiť", null)
-                            .show()
-                    }
+                    3 -> askName("Premenovať", saved.name) { name -> SavedPlaces.rename(saved.id, name) }
                     4 -> {
                         val link = "https://www.google.com/maps/search/?api=1&query=" +
                             String.format(Locale.US, "%.6f,%.6f", saved.point.lat, saved.point.lon)
