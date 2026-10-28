@@ -91,7 +91,7 @@ object Crossings {
         val east = (x + 1) / n * 360 - 180
         val north = lat(y / n)
         val south = lat((y + 1) / n)
-        Bg.run({ CrossingData.fetch(south, west, north, east) }) { result ->
+        Bg.runSlow({ CrossingData.fetch(south, west, north, east) }) { result ->
             loading.remove(k)
             result.onSuccess {
                 failedAt.remove(k)
