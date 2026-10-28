@@ -87,17 +87,29 @@ Novšie verzie sa inštalujú rovnako, cez starú verziu (nastavenia ostanú).
 
 Otvor **lech-map** a povoľ **presnú polohu** a **upozornenia** (pre navigáciu so zhasnutým displejom).
 
-### 4. Zapnutie v Android Auto
+### 4. Android Auto – len cez Google Play
 
-Android Auto štandardne zobrazuje len aplikácie z Google Play. Pre vlastnú aplikáciu:
+Android Auto spustí navigáciu s mapou (apku z knižnice Android for Cars) **len vtedy, keď je
+nainštalovaná z Google Play**. „Neznáme zdroje“ v nastaveniach pre vývojárov Android Auto platia
+len pre hudobné apky a správy, nie pre navigácie (pozri
+[návod Google](https://developer.android.com/training/cars/testing)). Preto sa lech-map do auta
+dostane cez **interné testovanie** v Google Play – bez zverejnenia a bez kontroly Googlom:
 
-1. V mobile otvor nastavenia **Android Auto**
-   (Nastavenia → Pripojené zariadenia → Predvoľby pripojenia → Android Auto).
-2. Úplne dole ťukni **10× na „Verzia“** a potvrď zapnutie režimu pre vývojárov.
-3. Vpravo hore cez **⋮** otvor **Nastavenia pre vývojárov**.
-4. Zaškrtni **„Neznáme zdroje“** (Unknown sources).
-5. Odpoj a znova pripoj mobil k autu. Ak lech-map nevidíš, v Android Auto nastaveniach
-   otvor **Prispôsobiť spúšťač** a zapni ho tam.
+1. V [Play Console](https://play.google.com/console) **Vytvoriť aplikáciu**: názov `lech-map`,
+   jazyk slovenčina, Aplikácia, Zadarmo, potvrdiť vyhlásenia.
+2. **Testovanie → Interné testovanie → Testeri**: vytvor zoznam s Gmailom, ktorý je v mobile,
+   ulož ho a skopíruj **odkaz na pripojenie**.
+3. **Vytvoriť nové vydanie**: podpisový kľúč nechaj na Google (predvolené), nahraj súbor
+   **`lech-map.aab`** z najnovšieho vydania na GitHube, ďalej **Uložiť** a **Spustiť vydanie
+   pre interné testovanie**. Ak Play pýta vyhlásenie k službe v popredí, vyber **Poloha –
+   navigácia odbočka po odbočke**.
+4. **Rozšírené nastavenia → Formáty → Pridať formát → Android Auto** a potvrď podmienky.
+5. V mobile **odinštaluj** lech-map z GitHubu (Play ju nevie aktualizovať, je inak podpísaná),
+   otvor odkaz z bodu 2 → **Stať sa testerom** → nainštaluj z Obchodu Play.
+6. Pripoj auto – lech-map je medzi aplikáciami (inak v Android Auto **Prispôsobiť spúšťač**).
+
+Ďalšie verzie: z každého vydania na GitHube nahraj nový `lech-map.aab` ako nové vydanie
+interného testovania; mobil ho stiahne z Obchodu Play.
 
 ### 5. Živá premávka (voliteľné)
 
