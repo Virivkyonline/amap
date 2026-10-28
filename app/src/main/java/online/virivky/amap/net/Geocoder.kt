@@ -11,9 +11,12 @@ import online.virivky.amap.geo.GeoPoint
 import online.virivky.amap.util.OpeningHours
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.IOException
 import java.net.URLEncoder
 import java.text.Normalizer
 import java.time.LocalDateTime
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.TimeUnit
 
 /**
  * Vyhľadávanie adries a miest. S kľúčom TomTom (presnejšie, s otváracími hodinami),
@@ -27,7 +30,7 @@ object Geocoder {
 
     /**
      * Vyhľadá miesta podľa textu a kritérií. [typeahead] = rýchle návrhy počas písania
-     * (len s kľúčom TomTom, Nominatim ich nepovoľuje).
+     * (TomTom a Photon; Nominatim ich nepovoľuje).
      */
     fun search(query: String, near: GeoPoint?, options: SearchOptions = SearchOptions(), typeahead: Boolean = false): SearchResult {
         val text = query.trim()
@@ -85,16 +88,80 @@ object Geocoder {
         return Place(title, address, point)
     }
 
+    /**
+     * TomTom (s kľúčom) a OpenStreetMap (Photon, zvládne aj preklepy) súbežne a výsledky spolu –
+     * každá služba pozná niečo, čo druhá nie (nové ulice, lokality, firmy). Keď Photon nejde,
+     * OpenStreetMap cez Nominatim.
+     */
     private fun find(text: String, near: GeoPoint?, area: SearchArea, typeahead: Boolean): List<Place> {
-        Settings.tomtomKey?.let { key ->
-            try {
-                return tomtom(key, text, near, area, typeahead)
-            } catch (e: Exception) {
-                // TomTom nedostupný – použijeme OpenStreetMap.
+        val osm = CompletableFuture.supplyAsync { runCatching { photon(text, near, area, typeahead) } }
+        val fromTomTom = Settings.tomtomKey?.let { key -> runCatching { tomtom(key, text, near, area, typeahead) }.getOrNull() }
+        var fromOsm = try {
+            osm.get(12, TimeUnit.SECONDS).getOrNull()
+        } catch (e: Exception) {
+            null
+        }
+        if (fromOsm == null && !typeahead) fromOsm = runCatching { nominatim(text, near, area) }.getOrNull()
+        if (fromTomTom == null && fromOsm == null) throw IOException("Hľadanie teraz nefunguje. Skontrolujte internet.")
+        return merge(fromTomTom.orEmpty(), fromOsm.orEmpty())
+    }
+
+    /** Spojí výsledky; to isté miesto z druhej služby (rovnaký názov blízko, alebo do 15 m) vynechá. */
+    private fun merge(first: List<Place>, second: List<Place>): List<Place> =
+        first + second.filter { s ->
+            first.none { f ->
+                val d = Geo.distance(f.point, s.point)
+                d < 15 || (d < 80 && normalize(f.name) == normalize(s.name))
             }
         }
-        if (typeahead) return emptyList()
-        return nominatim(text, near, area)
+
+    /** Hľadanie v OpenStreetMap cez Photon (komoot): adresy, ulice, obce, lokality aj firmy, s preklepmi. */
+    private fun photon(text: String, near: GeoPoint?, area: SearchArea, typeahead: Boolean): List<Place> {
+        val url = StringBuilder("https://photon.komoot.io/api/?limit=").append(if (typeahead) 10 else 30)
+            .append("&q=").append(URLEncoder.encode(text, "UTF-8"))
+        if (near != null) {
+            url.append("&lat=").append(near.lat).append("&lon=").append(near.lon)
+            if (area == SearchArea.NEARBY) {
+                url.append("&bbox=").append(near.lon - 0.65).append(',').append(near.lat - 0.45)
+                    .append(',').append(near.lon + 0.65).append(',').append(near.lat + 0.45)
+            }
+        }
+        val features = JSONObject(Http.getString(url.toString())).optJSONArray("features") ?: return emptyList()
+        return (0 until features.length()).mapNotNull { i ->
+            val f = features.getJSONObject(i)
+            val p = f.optJSONObject("properties") ?: return@mapNotNull null
+            val c = f.optJSONObject("geometry")?.optJSONArray("coordinates") ?: return@mapNotNull null
+            val country = p.optString("countrycode")
+            if (area == SearchArea.COUNTRY && !country.equals("SK", ignoreCase = true)) return@mapNotNull null
+            val type = p.optString("type")
+            val name = p.optString("name")
+            val street = p.optString("street")
+            val number = p.optString("housenumber")
+            val town = p.optString("city").ifBlank { p.optString("locality") }
+            val title = when {
+                name.isNotBlank() -> name
+                street.isNotBlank() -> "$street $number".trim()
+                number.isNotBlank() && town.isNotBlank() -> "$town $number"
+                else -> town
+            }
+            if (title.isBlank()) return@mapNotNull null
+            val address = listOf(
+                if (name.isNotBlank() && street.isNotBlank()) "$street $number".trim() else "",
+                p.optString("district"),
+                town,
+                p.optString("county"),
+                if (country.isNotBlank() && !country.equals("SK", ignoreCase = true)) p.optString("country") else "",
+            ).filter { it.isNotBlank() && it != title }.distinct().joinToString(", ")
+            val kind = when (type) {
+                "street" -> "Ulica"
+                "house" -> if (name.isNotBlank()) osmKind(p.optString("osm_value"), "").ifBlank { "Miesto" } else "Adresa"
+                "district", "locality" -> "Časť obce"
+                "city" -> if (p.optString("osm_value") == "village") "Obec" else "Mesto"
+                "county", "state" -> "Región"
+                else -> osmKind(p.optString("osm_value"), "")
+            }
+            Place(title, address, GeoPoint(c.getDouble(1), c.getDouble(0)), kind)
+        }
     }
 
     /**

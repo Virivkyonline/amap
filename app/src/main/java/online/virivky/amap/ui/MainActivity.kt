@@ -68,6 +68,7 @@ import online.virivky.amap.nav.ManeuverIcons
 import online.virivky.amap.nav.NavigationController
 import online.virivky.amap.nav.NavigationController.Phase
 import online.virivky.amap.net.Geocoder
+import online.virivky.amap.net.MapLinks
 import online.virivky.amap.net.Router
 import online.virivky.amap.net.TomTom
 import online.virivky.amap.util.Bg
@@ -285,7 +286,8 @@ class MainActivity : Activity() {
                 val query = text?.toString()?.trim().orEmpty()
                 if (query.isEmpty()) {
                     if (searchInput.hasFocus()) showPlaces(Recents.all())
-                } else if (Settings.tomtomKey != null && query.length >= 3 && searchInput.hasFocus()) {
+                } else if (query.length >= 3 && searchInput.hasFocus()) {
+                    // Návrhy počas písania (TomTom aj OpenStreetMap cez Photon).
                     Bg.main.postDelayed(typeahead, 450)
                 }
             }
@@ -409,6 +411,24 @@ class MainActivity : Activity() {
     }
 
     private fun handleIntent(intent: Intent?) {
+        // Miesto zdieľané z Google Máp (alebo iných máp) cez „Zdieľať → lech-map“.
+        if (intent?.action == Intent.ACTION_SEND) {
+            val text = intent.getStringExtra(Intent.EXTRA_TEXT) ?: return
+            Toast.makeText(this, "Zisťujem miesto z odkazu…", Toast.LENGTH_SHORT).show()
+            Bg.run({ MapLinks.resolve(text) }) { result ->
+                val shared = result.getOrNull()
+                val point = shared?.point
+                when {
+                    point != null -> choose(Place(shared?.name ?: "Miesto z odkazu", "Zdieľané z mapy", point))
+                    !shared?.query.isNullOrBlank() -> {
+                        searchInput.setText(shared?.query)
+                        search()
+                    }
+                    else -> Toast.makeText(this, "Z odkazu sa nepodarilo zistiť polohu.", Toast.LENGTH_LONG).show()
+                }
+            }
+            return
+        }
         val uri = intent?.data ?: return
         val target = GeoUri.parse(uri) ?: return
         val point = target.point
