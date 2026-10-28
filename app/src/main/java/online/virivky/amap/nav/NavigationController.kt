@@ -50,6 +50,9 @@ object NavigationController {
     /** Auto už bolo na trase (potom sa „prichádzanie na trasu“ zo začiatku neuplatňuje). */
     private var everOnRoute = false
     private var lastRerouteAt = 0L
+    /** Poloha, z ktorej sa počítala aktuálna trasa (môže byť nepresná – sieť v budove). */
+    private var routeFrom: GeoPoint? = null
+    private var lastPreviewRefreshAt = 0L
     private var lastSpeedWarningAt = 0L
     private var lastTrafficRefreshAt = 0L
 
@@ -359,6 +362,8 @@ object NavigationController {
         Bg.main.removeCallbacks(ticker)
         Bg.main.postDelayed(ticker, 1000)
         LocationTracker.last?.let { updateProgress(it) }
+        // Trasa z náhľadu sa počítala inde (nepresná poloha, odvtedy som sa pohol) – hneď nová odtiaľto.
+        LocationTracker.last?.takeIf { phase == Phase.NAVIGATING && farFromRouteStart(it) }?.let { computeRoute(reroute = true) }
         val p = progress
         val step = p?.let { route?.steps?.getOrNull(it.nextStepIndex) }
         val first = if (p != null && step != null) {
@@ -449,6 +454,7 @@ object NavigationController {
         }
         val id = ++request
         if (!silent) rerouting = reroute
+        routeFrom = GeoPoint(here)
         lastTrafficRefreshAt = SystemClock.elapsedRealtime()
         val remainingBefore = progress?.remainingSeconds
         val heading = if (reroute) LocationTracker.heading else null
@@ -493,6 +499,24 @@ object NavigationController {
         }
     }
 
+    /** Poloha je ďaleko od miesta, odkiaľ sa trasa počítala (viac ako 50 m, resp. 2× presnosť GPS). */
+    private fun farFromRouteStart(location: Location): Boolean {
+        val from = routeFrom ?: return false
+        return Geo.distance(from, GeoPoint(location)) > max(50.0, location.accuracy * 2.0)
+    }
+
+    /**
+     * Náhľad trasy z nepresnej polohy (v budove najprv len poloha zo siete, aj stovky metrov vedľa):
+     * keď sa poloha spresní či posunie, trasa sa vypočíta znova z miesta, kde naozaj som.
+     */
+    private fun refreshPreviewStart(location: Location) {
+        if (route == null || !farFromRouteStart(location)) return
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastPreviewRefreshAt < 10_000) return
+        lastPreviewRefreshAt = now
+        computeRoute(reroute = false)
+    }
+
     /**
      * Pri prepočte za jazdy trasa, ktorá nezačína otočením do protismeru (ako AMap: radšej okolo bloku),
      * ak taký variant je a nie je oveľa pomalší.
@@ -507,6 +531,7 @@ object NavigationController {
     }
 
     private fun onLocation(location: Location) {
+        if (phase == Phase.PREVIEW) refreshPreviewStart(location)
         if (phase != Phase.NAVIGATING) return
         lastFixAt = SystemClock.elapsedRealtime()
         speedOf(location)?.let { lastSpeed = it }
@@ -550,7 +575,9 @@ object NavigationController {
             }
         }
 
-        if (p.remainingDistance < 25 || Geo.distance(here, r.points.last()) < 20) {
+        // Pešo s horším GPS (les, budovy) väčší okruh cieľa, najviac 40 m.
+        val arrival = if (onFoot) location.accuracy.toDouble().coerceIn(20.0, 40.0) else 20.0
+        if (p.remainingDistance < 25 || Geo.distance(here, r.points.last()) < arrival) {
             phase = Phase.ARRIVED
             speak("Ste v cieli.")
             NavigationService.stop(app)
@@ -564,7 +591,9 @@ object NavigationController {
         if (p.offRouteDistance <= tolerance) everOnRoute = true
         // Z parkoviska či dvora na trasu: kým na nej auto nebolo, a len blízko jej začiatku.
         val joining = !everOnRoute && Geo.distance(here, r.points.first()) < 150
-        offRouteCount = if (p.offRouteDistance > tolerance && moving && !joining) offRouteCount + 1 else 0
+        // Pešo sa prepočíta aj pri státí, keď je trasa jasne inde (napr. vypočítaná z nepresnej polohy).
+        val clearlyOff = onFoot && p.offRouteDistance > tolerance * 2
+        offRouteCount = if (p.offRouteDistance > tolerance && (moving || clearlyOff) && !joining) offRouteCount + 1 else 0
         val now = SystemClock.elapsedRealtime()
         offRoute = offRouteCount > 0
         // Po zídení z trasy hneď nová trasa z miesta, kde auto je (počíta sa len za jazdy, takže
