@@ -226,6 +226,22 @@
                 android:layout_marginBottom="@dimen/gap"
                 android:orientation="vertical">
 
+                <TextView
+                    android:id="@+id/view_mode"
+                    android:layout_width="@dimen/button"
+                    android:layout_height="@dimen/button"
+                    android:layout_marginBottom="8dp"
+                    android:background="@drawable/round_button_bg"
+                    android:contentDescription="Pohľad na mapu"
+                    android:elevation="3dp"
+                    android:fontFamily="sans-serif-condensed"
+                    android:gravity="center"
+                    android:text="3D"
+                    android:textColor="@color/panel_text"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    android:visibility="gone" />
+
                 <ImageButton
                     android:id="@+id/zoom_in"
                     android:layout_width="@dimen/button"

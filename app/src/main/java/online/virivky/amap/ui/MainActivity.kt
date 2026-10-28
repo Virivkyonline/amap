@@ -39,6 +39,7 @@ import android.widget.TextView
 import android.widget.Toast
 import online.virivky.amap.R
 import online.virivky.amap.data.Favorites
+import online.virivky.amap.data.MapTheme
 import online.virivky.amap.data.Place
 import online.virivky.amap.data.Poi
 import online.virivky.amap.data.PoiCategory
@@ -90,6 +91,7 @@ class MainActivity : Activity() {
     private lateinit var zoomIn: View
     private lateinit var zoomOut: View
     private lateinit var myLocation: View
+    private lateinit var viewMode: TextView
     private lateinit var bottomPanel: View
     private lateinit var panelTitle: TextView
     private lateinit var panelSubtitle: TextView
@@ -173,6 +175,7 @@ class MainActivity : Activity() {
         zoomIn = findViewById(R.id.zoom_in)
         zoomOut = findViewById(R.id.zoom_out)
         myLocation = findViewById(R.id.my_location)
+        viewMode = findViewById(R.id.view_mode)
         bottomPanel = findViewById(R.id.bottom_panel)
         panelTitle = findViewById(R.id.panel_title)
         panelSubtitle = findViewById(R.id.panel_subtitle)
@@ -197,7 +200,7 @@ class MainActivity : Activity() {
 
         mapView.onCreate(savedInstanceState)
         mapView.getMapAsync { map ->
-            navMap = NavMap(this, map, isDark).also { controller ->
+            navMap = NavMap(this, map, isDark, followSun = true).also { controller ->
                 controller.onFollowChanged = { render() }
                 map.addOnMapLongClickListener { latLng ->
                     val point = GeoPoint(latLng.latitude, latLng.longitude)
@@ -271,6 +274,12 @@ class MainActivity : Activity() {
         zoomIn.setOnClickListener { navMap?.zoomIn() }
         zoomOut.setOnClickListener { navMap?.zoomOut() }
         myLocation.setOnClickListener { navMap?.recenter() }
+        viewMode.setOnClickListener {
+            val next = Settings.mapPerspective.next()
+            Settings.mapPerspective = next
+            Toast.makeText(this, next.label, Toast.LENGTH_SHORT).show()
+            render()
+        }
         findViewById<View>(R.id.nav_close).setOnClickListener { nav.stop() }
         navVoice.setOnClickListener {
             nav.voiceEnabled = !nav.voiceEnabled
@@ -747,7 +756,11 @@ class MainActivity : Activity() {
         zoomIn.visibility = if (navigating) View.GONE else View.VISIBLE
         zoomOut.visibility = if (navigating) View.GONE else View.VISIBLE
         myLocation.visibility = if (navigating && following) View.GONE else View.VISIBLE
-        mapControls.visibility = if (zoomIn.visibility == View.GONE && myLocation.visibility == View.GONE) View.GONE else View.VISIBLE
+        viewMode.visibility = if (navigating) View.VISIBLE else View.GONE
+        viewMode.text = Settings.mapPerspective.short
+        mapControls.visibility =
+            if (zoomIn.visibility == View.GONE && myLocation.visibility == View.GONE && viewMode.visibility == View.GONE) View.GONE
+            else View.VISIBLE
         primaryButton.isEnabled = true
         if (phase != Phase.NAVIGATING) servicesOpen = false
         updateSearchUi()
@@ -820,6 +833,19 @@ class MainActivity : Activity() {
             text = "Zobrazovať premávku na mape"
             isChecked = Settings.showTraffic
         }
+        val themeLabel = TextView(this).apply {
+            text = "Farby mapy"
+            textSize = 15f
+            setPadding(0, padding / 2, 0, 0)
+        }
+        val themes = android.widget.RadioGroup(this)
+        MapTheme.entries.forEachIndexed { i, theme ->
+            themes.addView(android.widget.RadioButton(this).apply {
+                id = 1000 + i
+                text = theme.label
+                isChecked = Settings.mapTheme == theme
+            })
+        }
         val status = TextView(this).apply {
             text = Router.lastTomTomError.orEmpty()
             setTextColor(getColor(R.color.amap_red))
@@ -830,13 +856,16 @@ class MainActivity : Activity() {
             addView(info)
             addView(keyInput)
             addView(showTraffic)
+            addView(themeLabel)
+            addView(themes)
             addView(status)
         }
         AlertDialog.Builder(this)
             .setTitle("Nastavenia")
-            .setView(layout)
+            .setView(android.widget.ScrollView(this).apply { addView(layout) })
             .setPositiveButton("Uložiť") { _, _ ->
                 val key = keyInput.text.toString().trim()
+                MapTheme.entries.getOrNull(themes.checkedRadioButtonId - 1000)?.let { Settings.mapTheme = it }
                 Settings.showTraffic = showTraffic.isChecked
                 Settings.tomtomKey = key.ifEmpty { null }
                 if (key.isNotEmpty()) {

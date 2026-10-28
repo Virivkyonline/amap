@@ -1,6 +1,7 @@
 package online.virivky.amap.car
 
 import androidx.car.app.CarContext
+import androidx.car.app.CarToast
 import androidx.car.app.Screen
 import androidx.car.app.model.Action
 import androidx.car.app.model.ActionStrip
@@ -13,6 +14,7 @@ import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import online.virivky.amap.R
 import online.virivky.amap.data.Favorites
+import online.virivky.amap.data.Settings
 import online.virivky.amap.nav.Instructions
 import online.virivky.amap.nav.NavigationController
 import online.virivky.amap.nav.NavigationController.Phase
@@ -105,7 +107,20 @@ class MapScreen(carContext: CarContext, private val map: CarMapSurface) : Screen
                         }
                         .build()
                 )
-                if (nav.phase == Phase.NAVIGATING) strip.addAction(servicesAction(withTitle = false))
+                if (nav.phase == Phase.NAVIGATING) {
+                    strip.addAction(servicesAction(withTitle = false))
+                    // Pohľad: 3D → 2D v smere jazdy → 2D sever hore.
+                    strip.addAction(
+                        Action.Builder()
+                            .setTitle(Settings.mapPerspective.short)
+                            .setOnClickListener {
+                                Settings.mapPerspective = Settings.mapPerspective.next()
+                                CarToast.makeText(carContext, Settings.mapPerspective.label, CarToast.LENGTH_SHORT).show()
+                                invalidate()
+                            }
+                            .build()
+                    )
+                }
             }
             Phase.PREVIEW, Phase.ROUTING -> {
                 if (nav.route != null) {

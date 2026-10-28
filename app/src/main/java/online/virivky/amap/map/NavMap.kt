@@ -4,6 +4,8 @@ import android.content.Context
 import android.graphics.Point
 import android.graphics.Rect
 import android.graphics.RectF
+import online.virivky.amap.data.MapTheme
+import online.virivky.amap.data.MapPerspective
 import online.virivky.amap.data.Poi
 import online.virivky.amap.data.Services
 import online.virivky.amap.data.Settings
@@ -24,6 +26,7 @@ import org.maplibre.android.geometry.LatLngBounds
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.Style
 import org.maplibre.android.style.sources.GeoJsonSource
+import online.virivky.amap.util.Sun
 import org.json.JSONObject
 import kotlin.math.ln
 
@@ -31,14 +34,22 @@ import kotlin.math.ln
  * Ovládanie vektorovej mapy pre telefón aj auto: trasa, šípka manévru, poloha
  * a kamera, ktorá počas navigácie sleduje auto v smere jazdy.
  */
-class NavMap(private val context: Context, val map: MapLibreMap, dark: Boolean) {
+class NavMap(
+    private val context: Context,
+    val map: MapLibreMap,
+    dark: Boolean,
+    /** V telefóne sa pri automatických farbách riadime slnkom (v aute rozhoduje auto). */
+    private val followSun: Boolean = false,
+) {
     /** Či mapa sleduje polohu (vypne sa, keď používateľ mapou pohne). */
     var follow = true
         private set
     var onFollowChanged: (() -> Unit)? = null
 
     private var style: Style? = null
+    private var systemDark = dark
     private var dark = dark
+    private var themeCheckedAt = 0L
     private val viewport = Rect()
     private var width = 0
     private var height = 0
@@ -62,9 +73,13 @@ class NavMap(private val context: Context, val map: MapLibreMap, dark: Boolean) 
     private var trafficKey = Settings.trafficLayerKey
     private val settingsListener: () -> Unit = {
         val key = Settings.trafficLayerKey
-        if (key != trafficKey) {
+        val themeChanged = updateTheme(force = true)
+        if (key != trafficKey || themeChanged) {
             trafficKey = key
             loadStyle()
+        } else {
+            // Napr. iný pohľad na mapu.
+            update()
         }
     }
 
@@ -90,6 +105,7 @@ class NavMap(private val context: Context, val map: MapLibreMap, dark: Boolean) 
                 TrafficEvents.requestArea(b.latitudeSouth, b.longitudeWest, b.latitudeNorth, b.longitudeEast)
             }
         }
+        updateTheme(force = true)
         loadStyle()
     }
 
@@ -118,10 +134,27 @@ class NavMap(private val context: Context, val map: MapLibreMap, dark: Boolean) 
         }
     }
 
+    /** Systémový (v aute podľa auta) denný či nočný režim. */
     fun setDark(dark: Boolean) {
-        if (this.dark == dark) return
-        this.dark = dark
-        loadStyle()
+        systemDark = dark
+        if (updateTheme(force = true)) loadStyle()
+    }
+
+    /** Prepočíta denné/nočné farby; vráti true, ak sa zmenili (štýl treba načítať znova). */
+    private fun updateTheme(force: Boolean = false): Boolean {
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (!force && now - themeCheckedAt < 60_000) return false
+        themeCheckedAt = now
+        val location = LocationTracker.last
+        val wanted = when (Settings.mapTheme) {
+            MapTheme.DAY -> false
+            MapTheme.NIGHT -> true
+            MapTheme.AUTO ->
+                if (followSun && location != null) Sun.isNight(location.latitude, location.longitude) else systemDark
+        }
+        if (wanted == dark) return false
+        dark = wanted
+        return true
     }
 
     private fun setFollow(value: Boolean) {
@@ -183,6 +216,11 @@ class NavMap(private val context: Context, val map: MapLibreMap, dark: Boolean) 
     /** Prekreslí trasu, značky a posunie kameru podľa aktuálneho stavu. */
     fun update(animate: Boolean = true) {
         val s = style ?: return
+        // Raz za minútu kontrola súmraku/svitania (automatické farby).
+        if (updateTheme()) {
+            loadStyle()
+            return
+        }
         val nav = NavigationController
         val navigating = isNavigating()
         val route = nav.route
@@ -439,16 +477,23 @@ class NavMap(private val context: Context, val map: MapLibreMap, dark: Boolean) 
                 }
                 navZoom = zoom
             }
-            val tilt = (40 + (speed - 30).coerceAtLeast(0.0) * 0.3).coerceIn(40.0, 58.0)
-            // Auto v dolnej časti voľnej plochy, mapa otočená v smere jazdy.
+            val mode = Settings.mapPerspective
+            val tilt = if (mode == MapPerspective.THREE_D) (40 + (speed - 30).coerceAtLeast(0.0) * 0.3).coerceIn(40.0, 58.0) else 0.0
+            val bearing = if (mode == MapPerspective.NORTH_UP) 0.0 else (heading ?: map.cameraPosition.bearing.toFloat()).toDouble()
+            // Auto v dolnej časti voľnej plochy, mapa otočená v smere jazdy (pri „sever hore“ bližšie k stredu).
+            val carShare = when (mode) {
+                MapPerspective.THREE_D -> 0.42
+                MapPerspective.HEADING_UP -> 0.36
+                MapPerspective.NORTH_UP -> 0.15
+            }
             CameraPosition.Builder()
                 .target(LatLng(me.lat, me.lon))
                 .zoom(navZoom)
-                .bearing((heading ?: map.cameraPosition.bearing.toFloat()).toDouble())
+                .bearing(bearing)
                 .tilt(tilt)
                 .padding(
                     area.left.toDouble(),
-                    area.top + area.height() * 0.42,
+                    area.top + area.height() * carShare,
                     (width - area.right).toDouble(),
                     (height - area.bottom).toDouble(),
                 )

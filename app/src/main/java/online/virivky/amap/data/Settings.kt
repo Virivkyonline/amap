@@ -29,6 +29,22 @@ object Settings {
             listeners.forEach { it() }
         }
 
+    /** Pohľad na mapu počas navigácie (3D, 2D v smere jazdy, 2D sever hore). */
+    var mapPerspective: MapPerspective
+        get() = MapPerspective.entries.firstOrNull { it.name == prefs.getString("map_view", null) } ?: MapPerspective.THREE_D
+        set(value) {
+            prefs.edit().putString("map_view", value.name).apply()
+            listeners.forEach { it() }
+        }
+
+    /** Denné či nočné farby mapy. */
+    var mapTheme: MapTheme
+        get() = MapTheme.entries.firstOrNull { it.name == prefs.getString("map_theme", null) } ?: MapTheme.AUTO
+        set(value) {
+            prefs.edit().putString("map_theme", value.name).apply()
+            listeners.forEach { it() }
+        }
+
     /** Čomu sa vyhýbať pri výpočte trasy. */
     var routeOptions: RouteOptions
         get() = RouteOptions(
