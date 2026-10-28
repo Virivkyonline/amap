@@ -4,6 +4,8 @@ import android.content.Context
 import android.graphics.Point
 import android.graphics.Rect
 import android.graphics.RectF
+import android.os.SystemClock
+import android.view.Choreographer
 import online.virivky.amap.data.Crossings
 import online.virivky.amap.data.MapTheme
 import online.virivky.amap.data.MapPerspective
@@ -85,6 +87,26 @@ class NavMap(
     private var trafficKey = Settings.trafficLayerKey
     private var vehicle = Settings.vehicleModel to Settings.vehicleColor
 
+    /** Plynulý pohyb auta a kamery po snímkach obrazovky (bez skákania raz za sekundu). */
+    private val motion = CarMotion()
+    private var framing = false
+    private val frame = Choreographer.FrameCallback { onFrame() }
+    /** Vzhľad polohy: "car" alebo "dot", a či ukazovať kompas. */
+    private var meIcon = "dot"
+    private var meCompass = false
+    private var meDestination: GeoPoint? = null
+    /** Kamera počas sledovania: cieľové a aktuálne (plynulo sa približujúce) priblíženie a náklon. */
+    private var navTilt = 0.0
+    private var freeZoom = 15.0
+    private var camZoom = Double.NaN
+    private var camTilt = 0.0
+    /** Plynulý presun kamery k autu po zapnutí sledovania: odkiaľ a odkedy. */
+    private var catchFrom: CameraPosition? = null
+    private var catchStart = 0L
+    /** Kamera sa má k autu presunúť plynulo (po zapnutí sledovania), nie skokom. */
+    private var catchUp = false
+    private var idleWorkAt = 0L
+
     /** Plynutie trasy: posun prerušovanej čiary po krokoch (ako pohyblivá trasa v AMap). */
     private var flowStep = 0
     private var flowRunning = false
@@ -156,6 +178,10 @@ class NavMap(
         Crossings.addListener(crossingsListener)
         // Dopravné udalosti vo výreze mapy (mimo navigácie; počas jazdy tie na trase).
         map.addOnCameraIdleListener {
+            // Pri sledovaní auta sa kamera posúva po snímkach – stačí raz za pol sekundy.
+            val now = SystemClock.uptimeMillis()
+            if (follow && now - idleWorkAt < 500) return@addOnCameraIdleListener
+            idleWorkAt = now
             updateCrossings()
             if (!isNavigating() && map.cameraPosition.zoom >= 9) {
                 val b = map.projection.visibleRegion.latLngBounds
@@ -170,6 +196,8 @@ class NavMap(
     fun dispose() {
         disposed = true
         Bg.main.removeCallbacks(flow)
+        if (framing) Choreographer.getInstance().removeFrameCallback(frame)
+        framing = false
         Settings.removeListener(settingsListener)
         Crossings.removeListener(crossingsListener)
     }
@@ -227,6 +255,10 @@ class NavMap(
     private fun setFollow(value: Boolean) {
         if (follow == value) return
         follow = value
+        if (value) {
+            catchUp = true
+            freeZoom = map.cameraPosition.zoom.coerceAtLeast(13.0)
+        }
         onFollowChanged?.invoke()
     }
 
@@ -250,14 +282,20 @@ class NavMap(
     private fun zoomBy(delta: Double) {
         userZoomAt = android.os.SystemClock.elapsedRealtime()
         if (isNavigating()) navZoom = (navZoom + delta).coerceIn(12.0, 19.0)
-        map.animateCamera(CameraUpdateFactory.zoomBy(delta), 250)
+        if (follow) {
+            if (!isNavigating()) freeZoom = (freeZoom + delta).coerceIn(3.0, 19.5)
+            startFrames()
+        } else {
+            map.animateCamera(CameraUpdateFactory.zoomBy(delta), 250)
+        }
     }
 
     fun recenter() {
         setFollow(true)
         userZoomAt = 0L
         if (isNavigating()) navZoom = 17.0
-        else if (map.cameraPosition.zoom < 15) map.moveCamera(CameraUpdateFactory.zoomTo(15.0))
+        else freeZoom = freeZoom.coerceAtLeast(15.0)
+        catchUp = true
         update()
     }
 
@@ -273,7 +311,11 @@ class NavMap(
         val delta = ln(factor.toDouble()) / ln(2.0)
         userZoomAt = android.os.SystemClock.elapsedRealtime()
         if (isNavigating()) navZoom = (navZoom + delta).coerceIn(12.0, 19.0)
-        if (follow || focusX < 0 || focusY < 0) map.moveCamera(CameraUpdateFactory.zoomBy(delta))
+        if (follow) {
+            if (!isNavigating()) freeZoom = (freeZoom + delta).coerceIn(3.0, 19.5)
+            camZoom = (if (camZoom.isNaN()) map.cameraPosition.zoom else camZoom) + delta
+            startFrames()
+        } else if (focusX < 0 || focusY < 0) map.moveCamera(CameraUpdateFactory.zoomBy(delta))
         else map.moveCamera(CameraUpdateFactory.zoomBy(delta, Point(focusX.toInt(), focusY.toInt())))
     }
 
@@ -295,18 +337,37 @@ class NavMap(
         val location = LocationTracker.last
         val snapped = progress?.takeIf { navigating && it.offRouteDistance < 30 }
 
-        // Trasa – počas jazdy len zostávajúca časť od auta.
-        val segment = if (navigating) progress?.segmentIndex ?: 0 else -1
+        // Moja poloha: počas navigácie auto s kompasom, inak bodka alebo auto podľa smeru.
+        // Na trase ide auto po trase a smer berie z jej tvaru; mimo nej poloha a smer z GPS.
+        val heading = (if (nav.estimating) snapped?.segmentBearing ?: LocationTracker.heading
+        else LocationTracker.heading ?: snapped?.segmentBearing)?.toDouble()
+        val target = snapped?.snapped ?: location?.let { GeoPoint(it) }
+        meIcon = if (heading != null || navigating) "car" else "dot"
+        meCompass = navigating
+        meDestination = if (navigating) nav.destination?.point else null
+        if (target == null) {
+            s.getSourceAs<GeoJsonSource>("me")?.setGeoJson(EMPTY)
+        } else if (motion.moveTo(SystemClock.uptimeMillis(), target, heading, if (snapped != null) route else null, snapped?.traveled)) {
+            startFrames()
+        }
+        drawMe()
+        val me = motion.point ?: target
+
+        // Trasa – počas jazdy len zostávajúca časť od (zobrazeného) auta.
+        val shownAlong = motion.along?.takeIf { snapped != null && motion.onRoute === route }
+        val head = if (route != null && shownAlong != null) route.progressAt(shownAlong) else snapped
+        val segment = if (navigating) head?.segmentIndex ?: 0 else -1
         if (route !== shownRoute || segment != shownSegment || snapped != null) {
             s.getSourceAs<GeoJsonSource>("route")?.setGeoJson(
-                if (route == null) EMPTY else routeFeatures(route, snapped?.segmentIndex ?: 0, snapped?.snapped)
+                if (route == null) EMPTY else routeFeatures(route, head?.segmentIndex ?: 0, head?.snapped)
             )
             shownRoute = route
             shownSegment = segment
             // Svetlý žiar na prvých metroch trasy pred autom.
             s.getSourceAs<GeoJsonSource>("route-head")?.setGeoJson(
                 if (route != null && progress != null && navigating) {
-                    lineString(route.slice(progress.traveled, progress.traveled + 70))
+                    val from = shownAlong ?: progress.traveled
+                    lineString(route.slice(from, from + 70))
                 } else {
                     EMPTY
                 }
@@ -437,22 +498,6 @@ class NavMap(
             shownDestination = destination
         }
 
-        // Moja poloha: počas navigácie auto s kompasom, inak bodka alebo auto podľa smeru.
-        // Bez GPS (tunel) sa smer berie z trasy, inak z GPS.
-        val heading = if (nav.estimating) snapped?.segmentBearing ?: LocationTracker.heading
-        else LocationTracker.heading ?: snapped?.segmentBearing
-        val me = snapped?.snapped ?: location?.let { GeoPoint(it) }
-        s.getSourceAs<GeoJsonSource>("destination-line")?.setGeoJson(
-            if (navigating && me != null && destination != null) lineString(listOf(me, destination)) else EMPTY
-        )
-        s.getSourceAs<GeoJsonSource>("me")?.setGeoJson(
-            if (me == null) EMPTY
-            else point(
-                me,
-                """"bearing":${heading ?: 0f},"icon":"${if (heading != null || navigating) "car" else "dot"}","compass":${if (navigating) 1 else 0}"""
-            )
-        )
-
         // Služby: mimo navigácie mapu priblížime na najbližšie nájdené miesta.
         val pois = Services.results
         if (pois !== shownPois) {
@@ -467,7 +512,7 @@ class NavMap(
             fit(pois.take(12).map { it.point } + listOfNotNull(me))
         }
 
-        updateCamera(navigating, route, me, heading, animate)
+        updateCamera(navigating, route, me, animate)
         wasNavigating = navigating
         updateFlow()
         updateCrossings()
@@ -639,15 +684,17 @@ class NavMap(
             }.joinToString(",")
         }]}"""
 
-    private fun updateCamera(navigating: Boolean, route: Route?, me: GeoPoint?, heading: Float?, animate: Boolean) {
+    private fun updateCamera(navigating: Boolean, route: Route?, me: GeoPoint?, animate: Boolean) {
         if (width == 0 || height == 0) return
         if (navigating && !wasNavigating) {
             setFollow(true)
             navZoom = 17.0
+            catchUp = true
         }
-        if (!navigating && wasNavigating) setFollow(true)
-        val area = if (viewport.isEmpty) Rect(0, 0, width, height) else viewport
-
+        if (!navigating && wasNavigating) {
+            setFollow(true)
+            catchUp = true
+        }
         if (!navigating && NavigationController.phase == Phase.PREVIEW && route != null && route !== fittedRoute) {
             fittedRoute = route
             // Všetky varianty trasy naraz.
@@ -657,7 +704,7 @@ class NavMap(
         if (NavigationController.phase == Phase.IDLE) fittedRoute = null
         if (!follow || me == null) return
 
-        val position = if (navigating) {
+        if (navigating) {
             // Vo vyššej rýchlosti viac oddialiť a nakloniť, aby bolo vidieť ďalej dopredu.
             val speed = (NavigationController.speedKmh ?: 0).toDouble()
             if (android.os.SystemClock.elapsedRealtime() - userZoomAt > 20_000) {
@@ -673,31 +720,35 @@ class NavMap(
                 if (shownLanes.isNotEmpty()) zoom = max(zoom, 18.7)
                 navZoom = zoom
             }
-            val mode = Settings.mapPerspective
-            val tilt = if (mode == MapPerspective.THREE_D) (40 + (speed - 30).coerceAtLeast(0.0) * 0.3).coerceIn(40.0, 58.0) else 0.0
-            val bearing = if (mode == MapPerspective.NORTH_UP) 0.0 else (heading ?: map.cameraPosition.bearing.toFloat()).toDouble()
-            // Auto v dolnej časti voľnej plochy, mapa otočená v smere jazdy (pri „sever hore“ bližšie k stredu).
-            val carShare = when (mode) {
-                MapPerspective.THREE_D -> 0.42
-                MapPerspective.HEADING_UP -> 0.36
-                MapPerspective.NORTH_UP -> 0.15
+            navTilt = if (Settings.mapPerspective == MapPerspective.THREE_D) {
+                (40 + (speed - 30).coerceAtLeast(0.0) * 0.3).coerceIn(40.0, 58.0)
+            } else {
+                0.0
             }
-            CameraPosition.Builder()
+        }
+        if (catchUp || !animate) {
+            // K autu plynulo (po zapnutí sledovania), potom už kamera ide s autom po snímkach.
+            camZoom = if (navigating) navZoom else freeZoom
+            camTilt = if (navigating) navTilt else 0.0
+            if (catchUp && animate) {
+                catchFrom = map.cameraPosition
+                catchStart = SystemClock.uptimeMillis()
+            } else {
+                catchFrom = null
+                cameraPosition(navigating, me)?.let { map.moveCamera(CameraUpdateFactory.newCameraPosition(it)) }
+            }
+            catchUp = false
+        }
+        startFrames()
+    }
+
+    /** Kamera nad zobrazeným autom: počas navigácie v smere jazdy, auto v dolnej časti voľnej plochy. */
+    private fun cameraPosition(navigating: Boolean, me: GeoPoint): CameraPosition? {
+        val area = if (viewport.isEmpty) Rect(0, 0, width, height) else viewport
+        if (!navigating) {
+            return CameraPosition.Builder()
                 .target(LatLng(me.lat, me.lon))
-                .zoom(navZoom)
-                .bearing(bearing)
-                .tilt(tilt)
-                .padding(
-                    area.left.toDouble(),
-                    area.top + area.height() * carShare,
-                    (width - area.right).toDouble(),
-                    (height - area.bottom).toDouble(),
-                )
-                .build()
-        } else {
-            CameraPosition.Builder()
-                .target(LatLng(me.lat, me.lon))
-                .zoom(map.cameraPosition.zoom.coerceAtLeast(13.0))
+                .zoom(camZoom)
                 .bearing(0.0)
                 .tilt(0.0)
                 .padding(
@@ -706,8 +757,99 @@ class NavMap(
                 )
                 .build()
         }
-        if (animate) map.easeCamera(CameraUpdateFactory.newCameraPosition(position), 900, false)
-        else map.moveCamera(CameraUpdateFactory.newCameraPosition(position))
+        val mode = Settings.mapPerspective
+        val bearing = if (mode == MapPerspective.NORTH_UP) 0.0 else motion.bearing ?: map.cameraPosition.bearing
+        // Pri „sever hore“ je auto bližšie k stredu.
+        val carShare = when (mode) {
+            MapPerspective.THREE_D -> 0.42
+            MapPerspective.HEADING_UP -> 0.36
+            MapPerspective.NORTH_UP -> 0.15
+        }
+        return CameraPosition.Builder()
+            .target(LatLng(me.lat, me.lon))
+            .zoom(camZoom)
+            .bearing(bearing)
+            .tilt(camTilt)
+            .padding(
+                area.left.toDouble(),
+                area.top + area.height() * carShare,
+                (width - area.right).toDouble(),
+                (height - area.bottom).toDouble(),
+            )
+            .build()
+    }
+
+    private fun startFrames() {
+        if (framing || disposed) return
+        framing = true
+        lastFrameAt = SystemClock.uptimeMillis()
+        Choreographer.getInstance().postFrameCallback(frame)
+    }
+
+    private var lastFrameAt = 0L
+
+    /** Jedna snímka: posun auta, kamera za ním, plynulá zmena priblíženia a náklonu. */
+    private fun onFrame() {
+        framing = false
+        if (disposed || style == null) return
+        val now = SystemClock.uptimeMillis()
+        val dt = (now - lastFrameAt).coerceIn(0L, 100L)
+        lastFrameAt = now
+        var moving = motion.step(now)
+        drawMe()
+        val me = motion.point
+        if (follow && me != null && width > 0 && height > 0) {
+            val navigating = isNavigating()
+            if (camZoom.isNaN()) camZoom = map.cameraPosition.zoom
+            val wantedZoom = if (navigating) navZoom else freeZoom
+            val wantedTilt = if (navigating) navTilt else 0.0
+            val k = 1 - kotlin.math.exp(-dt / 600.0)
+            camZoom += (wantedZoom - camZoom) * k
+            camTilt += (wantedTilt - camTilt) * k
+            if (abs(wantedZoom - camZoom) > 0.005 || abs(wantedTilt - camTilt) > 0.05) moving = true
+            var position = cameraPosition(navigating, me)
+            val from = catchFrom
+            if (from != null && position != null) {
+                val f = ((now - catchStart) / CATCH_MS).coerceIn(0.0, 1.0)
+                position = blend(from, position, f * f * (3 - 2 * f))
+                if (f >= 1) catchFrom = null else moving = true
+            }
+            position?.let { map.moveCamera(CameraUpdateFactory.newCameraPosition(it)) }
+        } else {
+            catchFrom = null
+        }
+        if (moving) startFrames()
+    }
+
+    /** Kamera medzi [a] a [b] (0 = a, 1 = b), smer najkratšou cestou. */
+    private fun blend(a: CameraPosition, b: CameraPosition, t: Double): CameraPosition {
+        val at = a.target ?: return b
+        val bt = b.target ?: return b
+        val turn = ((b.bearing - a.bearing + 540) % 360) - 180
+        val builder = CameraPosition.Builder()
+            .target(LatLng(at.latitude + (bt.latitude - at.latitude) * t, at.longitude + (bt.longitude - at.longitude) * t))
+            .zoom(a.zoom + (b.zoom - a.zoom) * t)
+            .tilt(a.tilt + (b.tilt - a.tilt) * t)
+            .bearing((a.bearing + turn * t + 360) % 360)
+        val pa = a.padding
+        val pb = b.padding
+        if (pb != null) {
+            builder.padding(DoubleArray(pb.size) { i -> (pa?.getOrNull(i) ?: pb[i]) + (pb[i] - (pa?.getOrNull(i) ?: pb[i])) * t })
+        }
+        return builder.build()
+    }
+
+    /** Auto (či bodka) na zobrazenej polohe a čiara k cieľu. */
+    private fun drawMe() {
+        val s = style ?: return
+        val me = motion.point ?: return
+        s.getSourceAs<GeoJsonSource>("me")?.setGeoJson(
+            point(me, """"bearing":${motion.bearing ?: 0.0},"icon":"$meIcon","compass":${if (meCompass) 1 else 0}""")
+        )
+        val destination = meDestination
+        s.getSourceAs<GeoJsonSource>("destination-line")?.setGeoJson(
+            if (destination != null) lineString(listOf(me, destination)) else EMPTY
+        )
     }
 
     /** Trasa rozdelená na úseky podľa premávky (vlastnosť „level“ určuje farbu). */
@@ -749,6 +891,9 @@ class NavMap(
             arrayOf(0f, 3f, 3f, 1f), arrayOf(0f, 3.5f, 3f, 0.5f),
         )
         private const val FLOW_FRAME_MS = 60L
+
+        /** Ako dlho trvá plynulý presun kamery k autu. */
+        private const val CATCH_MS = 800.0
 
         private fun round(v: Double) = Math.round(v * 1e7) / 1e7
 
