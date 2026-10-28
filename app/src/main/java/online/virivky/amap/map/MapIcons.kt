@@ -171,7 +171,7 @@ object MapIcons {
     }
 
     /** Špendlík cieľa či zastávky (hrot dole v strede). */
-    private fun pin(c: Canvas, w: Float, h: Float, color: Int) {
+    private fun pin(c: Canvas, w: Float, h: Float, pinColor: Int) {
         val cx = w / 2
         val r = w * 0.42f
         val path = Path()
@@ -180,7 +180,7 @@ object MapIcons {
         path.lineTo(cx, h - 1f)
         path.lineTo(cx + r * 0.7f, r + 1f + r * 0.7f)
         path.close()
-        val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { this.color = color }
+        val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = pinColor }
         c.drawPath(path, fill)
         val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.WHITE
