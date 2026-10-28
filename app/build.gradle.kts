@@ -5,9 +5,12 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
-// CI nastaví GITHUB_RUN_NUMBER, takže každé zostavenie má vyššie číslo verzie
-// a dá sa nainštalovať ako aktualizácia cez predchádzajúcu.
+// Číslo zostavenia z CI (GITHUB_RUN_NUMBER) je v názve verzie.
 val buildNumber = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
+
+// Kód verzie = minúty od 1. 1. 2026, takže každé nové zostavenie je vyššie a dá sa nainštalovať
+// ako aktualizácia – aj keď sa zostavuje v inom repozitári (tam čísla zostavení začínajú od 1).
+val versionMinutes = ((System.currentTimeMillis() / 1000 - 1_767_225_600L) / 60).toInt()
 
 android {
     namespace = "online.virivky.amap"
@@ -17,7 +20,7 @@ android {
         applicationId = "online.virivky.amap"
         minSdk = 26
         targetSdk = 35
-        versionCode = buildNumber
+        versionCode = versionMinutes
         versionName = "1.0.$buildNumber"
 
         // Mobily a autá používajú ARM; x86 knižnice mapy by len zväčšili APK.
