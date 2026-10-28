@@ -1,0 +1,217 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <online.virivky.amap.ui.MapView
+        android:id="@+id/map"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <LinearLayout
+        android:id="@+id/overlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:fitsSystemWindows="true"
+        android:orientation="vertical">
+
+        <LinearLayout
+            android:id="@+id/search_bar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_margin="@dimen/gap"
+            android:background="@drawable/panel_bg"
+            android:elevation="4dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="16dp"
+            android:paddingEnd="4dp">
+
+            <EditText
+                android:id="@+id/search_input"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:background="@null"
+                android:hint="Kam idete?"
+                android:imeOptions="actionSearch"
+                android:importantForAutofill="no"
+                android:inputType="text"
+                android:paddingTop="14dp"
+                android:paddingBottom="14dp"
+                android:singleLine="true"
+                android:textColor="@color/panel_text"
+                android:textSize="17sp" />
+
+            <ImageButton
+                android:id="@+id/search_button"
+                android:layout_width="@dimen/button"
+                android:layout_height="@dimen/button"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Hľadať"
+                android:src="@drawable/ic_search"
+                android:tint="@color/panel_text" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/instruction_card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_margin="@dimen/gap"
+            android:background="@drawable/instruction_bg"
+            android:elevation="4dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:padding="14dp"
+            android:visibility="gone">
+
+            <ImageView
+                android:id="@+id/maneuver_icon"
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:contentDescription="Manéver" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="14dp"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/maneuver_distance"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textColor="@android:color/white"
+                    android:textSize="28sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/maneuver_text"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textColor="@android:color/white"
+                    android:textSize="18sp" />
+
+                <TextView
+                    android:id="@+id/maneuver_road"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:alpha="0.85"
+                    android:textColor="@android:color/white"
+                    android:textSize="15sp" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1">
+
+            <ListView
+                android:id="@+id/results"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="@dimen/gap"
+                android:layout_marginEnd="@dimen/gap"
+                android:background="@drawable/panel_bg"
+                android:elevation="4dp"
+                android:visibility="gone" />
+
+            <LinearLayout
+                android:id="@+id/map_controls"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="bottom|end"
+                android:layout_margin="@dimen/gap"
+                android:orientation="vertical">
+
+                <ImageButton
+                    android:id="@+id/zoom_in"
+                    android:layout_width="@dimen/button"
+                    android:layout_height="@dimen/button"
+                    android:background="@drawable/round_button_bg"
+                    android:contentDescription="Priblížiť"
+                    android:elevation="3dp"
+                    android:src="@drawable/ic_zoom_in"
+                    android:tint="@color/panel_text" />
+
+                <ImageButton
+                    android:id="@+id/zoom_out"
+                    android:layout_width="@dimen/button"
+                    android:layout_height="@dimen/button"
+                    android:layout_marginTop="8dp"
+                    android:background="@drawable/round_button_bg"
+                    android:contentDescription="Oddialiť"
+                    android:elevation="3dp"
+                    android:src="@drawable/ic_zoom_out"
+                    android:tint="@color/panel_text" />
+
+                <ImageButton
+                    android:id="@+id/my_location"
+                    android:layout_width="@dimen/button"
+                    android:layout_height="@dimen/button"
+                    android:layout_marginTop="8dp"
+                    android:background="@drawable/round_button_bg"
+                    android:contentDescription="Moja poloha"
+                    android:elevation="3dp"
+                    android:src="@drawable/ic_my_location"
+                    android:tint="@color/amap_blue" />
+            </LinearLayout>
+        </FrameLayout>
+
+        <LinearLayout
+            android:id="@+id/bottom_panel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_margin="@dimen/gap"
+            android:background="@drawable/panel_bg"
+            android:elevation="6dp"
+            android:orientation="vertical"
+            android:padding="16dp"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/panel_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="2"
+                android:textColor="@color/panel_text"
+                android:textSize="20sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/panel_subtitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:ellipsize="end"
+                android:maxLines="3"
+                android:textColor="@color/panel_text_secondary"
+                android:textSize="15sp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/primary_button"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:backgroundTint="@color/amap_blue"
+                    android:textColor="@android:color/white" />
+
+                <Button
+                    android:id="@+id/secondary_button"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:layout_weight="1" />
+            </LinearLayout>
+        </LinearLayout>
+    </LinearLayout>
+</FrameLayout>
