@@ -99,6 +99,16 @@ object MapStyle {
     private fun width(vararg stops: Pair<Number, Number>) =
         """["interpolate",["exponential",1.5],["zoom"],${stops.joinToString(",") { "${it.first},${it.second}" }}]"""
 
+    /** Hodnota výrazu [width] pri priblížení [z]. */
+    private fun widthAt(stops: Array<Pair<Number, Number>>, z: Double): Double {
+        val i = stops.indexOfLast { it.first.toDouble() <= z }.coerceIn(0, stops.size - 2)
+        val z0 = stops[i].first.toDouble()
+        val z1 = stops[i + 1].first.toDouble()
+        val t = (Math.pow(1.5, z - z0) - 1) / (Math.pow(1.5, z1 - z0) - 1)
+        val w0 = stops[i].second.toDouble()
+        return w0 + (stops[i + 1].second.toDouble() - w0) * t.coerceIn(0.0, 1.0)
+    }
+
     /** Šírka okraja cesty: šírka cesty + 1 až 3 px podľa priblíženia. */
     private fun casing(vararg stops: Pair<Number, Number>) =
         width(*stops.map { (z, w) -> z to w.toDouble() + (1.0 + (z.toDouble() - 14.0) * 2.0 / 3.0).coerceIn(1.0, 3.0) }.toTypedArray())
@@ -134,7 +144,18 @@ object MapStyle {
         val majorStops = arrayOf<Pair<Number, Number>>(8 to 0.5, 12 to 2.2, 15 to 9, 18 to 28, 19 to 54, 20 to 106)
         val secondaryStops = arrayOf<Pair<Number, Number>>(10 to 0.5, 13 to 2.4, 15 to 7, 18 to 24, 19 to 46, 20 to 90)
         val minorStops = arrayOf<Pair<Number, Number>>(13 to 0.6, 15 to 4.5, 18 to 18, 19 to 34, 20 to 66)
-        val serviceW = width(14 to 0.5, 16 to 2.5, 18 to 9, 19 to 17, 20 to 33)
+        val serviceStops = arrayOf<Pair<Number, Number>>(14 to 0.5, 16 to 2.5, 18 to 9, 19 to 17, 20 to 33)
+        val serviceW = width(*serviceStops)
+        // Priechod pre chodcov: 6 pruhov pozdĺž cesty na ~90 % jej šírky podľa triedy cesty, aby nepresahoval cez okraj.
+        // [perBar] = násobí sa vlastnosťou „f“ (poloha pruhu od stredu cesty ako podiel šírky priechodu).
+        fun byRoad(scale: Double, perBar: Boolean) = """["interpolate",["exponential",1.5],["zoom"],""" +
+            listOf(16, 18, 19, 20).joinToString(",") { z ->
+                fun w(stops: Array<Pair<Number, Number>>) = Math.round(widthAt(stops, z.toDouble()) * scale * 1000) / 1000.0
+                val match = """["match",["get","c"],"major",${w(majorStops)},"secondary",${w(secondaryStops)},""" +
+                    """"service",${w(serviceStops)},${w(minorStops)}]"""
+                "$z," + if (perBar) """["*",["get","f"],$match]""" else match
+            } + "]"
+        val zebraColor = if (dark) "#f4f6f8" else "#d0d5dd"
 
         // V noci: pri jazde tmavý asfalt so svetlými okrajmi, pri oddialení modrosivé cesty.
         val near = c.asphaltNear
@@ -301,6 +322,14 @@ object MapStyle {
                 "paint":{"line-color":"${if (dark) "#e6e9ef" else "#c2c7cf"}","line-opacity":0.8,
                   "line-width":${linear(16 to 1, 18 to 2, 20 to 4)},"line-dasharray":[6,6]}}"""
             )
+            // Priechody pre chodcov nad trasou (trasa ich neprekrýva, ako v AMap): každý pruh je krátka čiara
+            // pozdĺž cesty posunutá od jej stredu, šírky podľa cesty – ani v 3D nepresahujú cez okraj cesty.
+            add(
+                """{"id":"crossings","type":"line","source":"crossings","minzoom":16,
+                "layout":{"line-cap":"butt","line-join":"round"},
+                "paint":{"line-color":"$zebraColor","line-opacity":0.95,
+                  "line-width":${byRoad(0.94 / 6 * 0.6, false)},"line-offset":${byRoad(0.94, true)}}}"""
+            )
             add(
                 """{"id":"route-glow","type":"line","source":"route-head",
                 "layout":{"line-cap":"round","line-join":"round"},
@@ -337,6 +366,11 @@ object MapStyle {
                 """{"id":"lanes-edge","type":"line","source":"lanes","minzoom":15,"filter":["==",["get","k"],"edge"],
                 "layout":{"line-cap":"butt","line-join":"round"},
                 "paint":{"line-color":"${c.edgeNear ?: "#6E7586"}","line-width":${meters("w")},"line-offset":${meters("o")}}}"""
+            )
+            add(
+                """{"id":"lanes-zebra","type":"line","source":"lanes","minzoom":15,"filter":["==",["get","k"],"zebra"],
+                "layout":{"line-cap":"butt","line-join":"round"},
+                "paint":{"line-color":"$zebraColor","line-opacity":0.95,"line-width":${meters("w")},"line-offset":${meters("o")}}}"""
             )
             add(
                 """{"id":"lane-marks","type":"symbol","source":"lane-marks","minzoom":15,
@@ -459,7 +493,7 @@ object MapStyle {
               "tiles":["https://api.tomtom.com/traffic/map/4/tile/flow/$style/{z}/{x}/{y}.png?key=$key&tileSize=512&thickness=8"]}"""
         }
         val sources = listOf(
-            "route", "alternatives", "route-labels", "incidents", "incident-lines", "lanes", "lane-marks", "arrow", "arrowhead", "cameras",
+            "route", "alternatives", "route-labels", "incidents", "incident-lines", "lanes", "lane-marks", "crossings", "arrow", "arrowhead", "cameras",
             "signals", "pois", "via",
             "destination", "destination-line", "me",
         )

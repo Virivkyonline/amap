@@ -22,6 +22,8 @@ Vlastná navigácia **lech-map** pre Android, ktorá funguje aj v **Android Auto
   farby mapy **automaticky podľa slnka** (v aute podľa auta), stále denné alebo nočné
 - jazdné pruhy pred odbočkou (ktorým pruhom ísť) a **pohľad na pruhy na mape**: pred odbočkou sa mapa
   priblíži, cesta sa rozdelí na pruhy, správne pruhy sú zelené, na pruhoch biele šípky a červené X
+- **priechody pre chodcov** (zebry z OpenStreetMap) pri priblížení mapy: biele pruhy cez celú cestu, nakreslené
+  nad zelenou trasou (trasa ich neprekrýva) a pri pohľade na pruhy aj cez zvýraznené pruhy
 - zelená trasa ostáva **vnútri cesty** (pri priblížení sa cesta rozširuje, trasa má tmavú stredovú
   medzeru a žlté stredové čiary cesty sú nad ňou)
 - **obraz križovatky** pred zjazdom, rozdvojením a kruhovým objazdom: nakreslený pohľad na cestu

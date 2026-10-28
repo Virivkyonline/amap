@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Point
 import android.graphics.Rect
 import android.graphics.RectF
+import online.virivky.amap.data.Crossings
 import online.virivky.amap.data.MapTheme
 import online.virivky.amap.data.MapPerspective
 import online.virivky.amap.data.Place
@@ -34,8 +35,10 @@ import org.maplibre.android.style.sources.GeoJsonSource
 import online.virivky.amap.util.Bg
 import online.virivky.amap.util.Sun
 import org.json.JSONObject
+import kotlin.math.abs
 import kotlin.math.ln
 import kotlin.math.max
+import kotlin.math.roundToInt
 
 /**
  * Ovládanie vektorovej mapy pre telefón aj auto: trasa, šípka manévru, poloha
@@ -77,6 +80,7 @@ class NavMap(
     private var shownAlternatives: List<Route>? = null
     private var shownIncidents: Any? = null
     private var shownLanes = ""
+    private var shownCrossings = ""
     private var shownSelected: Route? = null
     private var trafficKey = Settings.trafficLayerKey
     private var vehicle = Settings.vehicleModel to Settings.vehicleColor
@@ -131,6 +135,9 @@ class NavMap(
         }
     }
 
+    // Nové priechody: pri pohľade na pruhy prepočítať aj pruhy (priechody cez ne).
+    private val crossingsListener = Crossings.Listener { if (shownLanes.isNotEmpty()) update() else updateCrossings() }
+
     init {
         map.uiSettings.isLogoEnabled = false
         map.uiSettings.isAttributionEnabled = false
@@ -146,8 +153,10 @@ class NavMap(
             map.moveCamera(CameraUpdateFactory.newLatLngZoom(LatLng(it.latitude, it.longitude), 15.0))
         } ?: map.moveCamera(CameraUpdateFactory.newLatLngZoom(LatLng(48.1486, 17.1077), 12.0))
         Settings.addListener(settingsListener)
+        Crossings.addListener(crossingsListener)
         // Dopravné udalosti vo výreze mapy (mimo navigácie; počas jazdy tie na trase).
         map.addOnCameraIdleListener {
+            updateCrossings()
             if (!isNavigating() && map.cameraPosition.zoom >= 9) {
                 val b = map.projection.visibleRegion.latLngBounds
                 TrafficEvents.requestArea(b.latitudeSouth, b.longitudeWest, b.latitudeNorth, b.longitudeEast)
@@ -162,6 +171,7 @@ class NavMap(
         disposed = true
         Bg.main.removeCallbacks(flow)
         Settings.removeListener(settingsListener)
+        Crossings.removeListener(crossingsListener)
     }
 
     private fun loadStyle() {
@@ -182,6 +192,7 @@ class NavMap(
             shownAlternatives = null
             shownIncidents = null
             shownLanes = ""
+            shownCrossings = ""
             update()
         }
     }
@@ -328,7 +339,7 @@ class NavMap(
             progress!!.distanceToNextStep < 600 && LaneIcons.useful(it.lanes) &&
                 it.type !in setOf("roundabout", "rotary", "arrive", "waypoint")
         }
-        val lanesKey = if (laneStep != null) "${System.identityHashCode(route)}-${progress!!.nextStepIndex}" else ""
+        val lanesKey = if (laneStep != null) "${System.identityHashCode(route)}-${progress!!.nextStepIndex}-${Crossings.version}" else ""
         if (lanesKey != shownLanes) {
             if (laneStep != null && route != null) {
                 val (lines, marks) = laneFeatures(route, progress!!.nextStepIndex, laneStep)
@@ -459,6 +470,37 @@ class NavMap(
         updateCamera(navigating, route, me, heading, animate)
         wasNavigating = navigating
         updateFlow()
+        updateCrossings()
+    }
+
+    /** Priechody pre chodcov okolo stredu mapy (načítajú sa len pri veľkom priblížení). */
+    private fun updateCrossings() {
+        val s = style ?: return
+        val camera = map.cameraPosition
+        val target = camera.target ?: return
+        if (camera.zoom < 15.5) return
+        val center = GeoPoint(target.latitude, target.longitude)
+        Crossings.request(center)
+        val key = "${Crossings.version}-${Crossings.tileKey(center)}"
+        if (key == shownCrossings) return
+        shownCrossings = key
+        val features = Crossings.around(center).joinToString(",") { crossing ->
+            // Krátka čiara pozdĺž cesty (hĺbka priechodu podľa šírky cesty na mape).
+            val half = when (crossing.road) {
+                "major" -> 1.8
+                "secondary" -> 1.5
+                "service" -> 0.8
+                else -> 1.1
+            }
+            val a = Geo.offset(crossing.point, crossing.bearing - 90, -half)
+            val b = Geo.offset(crossing.point, crossing.bearing - 90, half)
+            val line = "[${coord(a)},${coord(b)}]"
+            (0 until ZEBRA_BARS).joinToString(",") { i ->
+                """{"type":"Feature","properties":{"c":"${crossing.road}","f":${(i - (ZEBRA_BARS - 1) / 2.0) / ZEBRA_BARS}},""" +
+                    """"geometry":{"type":"LineString","coordinates":$line}}"""
+            }
+        }
+        s.getSourceAs<GeoJsonSource>("crossings")?.setGeoJson("""{"type":"FeatureCollection","features":[$features]}""")
     }
 
     /**
@@ -499,6 +541,25 @@ class NavMap(
             val center = left + (i + 0.5) * w
             mark(end - 55, center, laneIcon(lane, step.modifier))
             if (!lane.valid) mark(end - 22, center, "lane-x")
+        }
+        // Priechody pre chodcov cez naše pruhy (len tie cez cestu, po ktorej ideme, nie cez priečnu).
+        val endPoint = route.pointAt(end)
+        for (crossing in Crossings.around(endPoint)) {
+            if (Geo.distance(crossing.point, endPoint) > 400) continue
+            val along = route.alongOf(crossing.point, 8.0) ?: continue
+            if (along < start + 5 || along > end + 12) continue
+            val p = route.pointAt(along)
+            val bearing = Geo.bearing(p, route.pointAt(along + 5))
+            val diff = ((crossing.bearing - bearing) % 180 + 180) % 180
+            if (abs(diff - 90) < 55) continue
+            // Pruhy po ~0,55 m s rovnakými medzerami cez všetky naše pruhy.
+            val zebra = route.slice(along - 1.8, along + 1.8).joinToString(",") { coord(it) }
+            val width = n * w * 0.94
+            val bars = (width / 1.1).roundToInt().coerceAtLeast(3)
+            for (i in 0 until bars) {
+                val offset = left + n * w / 2 + (i - (bars - 1) / 2.0) * width / bars
+                lines.add("""{"type":"Feature","properties":{"k":"zebra","w":${width / bars * 0.5},"o":$offset},"geometry":{"type":"LineString","coordinates":[$zebra]}}""")
+            }
         }
         return """{"type":"FeatureCollection","features":[${lines.joinToString(",")}]}""" to
             """{"type":"FeatureCollection","features":[${marks.joinToString(",")}]}"""
@@ -676,6 +737,9 @@ class NavMap(
 
     companion object {
         private const val EMPTY = """{"type":"FeatureCollection","features":[]}"""
+
+        /** Počet bielych pruhov priechodu pre chodcov (šírky a posuny podľa cesty v štýle mapy). */
+        private const val ZEBRA_BARS = 6
 
         /** Kroky posunu pruhov (v násobkoch hrúbky čiary): pruh 3, medzera 4, posun o pol jednotky. */
         private val FLOW: Array<Array<Float>> = arrayOf(
