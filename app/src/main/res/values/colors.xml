@@ -5,6 +5,7 @@
     <color name="amap_red">#E5333A</color>
     <color name="nav_black">#0B0D12</color>
     <color name="nav_text_secondary">#A9AFBA</color>
+    <color name="highway_green">#1C8A57</color>
     <color name="panel">#FFFFFF</color>
     <color name="panel_text">#202124</color>
     <color name="panel_text_secondary">#5F6368</color>

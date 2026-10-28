@@ -162,6 +162,14 @@ object MapStyle {
                   ["!=",["get","oneway"],1],$NOT_TUNNEL],
                 "paint":{"line-color":"${c.centerLine}","line-width":${linear(16 to 0.8, 18 to 2)},"line-dasharray":[5,4]}}"""
             )
+            // Biele prerušované čiary medzi jazdnými pruhmi na diaľniciach a rýchlostných cestách.
+            add(
+                """{"id":"lane-divider","type":"line","source":"omt","source-layer":"transportation","minzoom":15,
+                "filter":["all",["!=",["get","ramp"],1],$NOT_TUNNEL,
+                  ["any",["==",["get","class"],"motorway"],["all",["==",["get","class"],"trunk"],["==",["get","oneway"],1]]]],
+                "paint":{"line-color":"${if (dark) "#e6e9ef" else "#c2c7cf"}","line-opacity":0.8,
+                  "line-width":${linear(15 to 0.8, 18 to 2)},"line-dasharray":[6,6]}}"""
+            )
             add(
                 """{"id":"rail","type":"line","source":"omt","source-layer":"transportation","minzoom":12,
                 "filter":["match",["get","class"],["rail","transit"],true,false],
@@ -226,13 +234,13 @@ object MapStyle {
             add(
                 """{"id":"route-casing","type":"line","source":"route",
                 "layout":{"line-cap":"round","line-join":"round"},
-                "paint":{"line-color":${trafficColor(c.routeCasing, "#c98400", "#b3261e", "#6b0d14")},
+                "paint":{"line-color":${trafficColor(c.routeCasing, "#b89100", "#b3261e", "#6b0d14")},
                   "line-width":${linear(5 to 4, 12 to 8, 15 to 13, 17 to 19, 18 to 26)}}}"""
             )
             add(
                 """{"id":"route-line","type":"line","source":"route",
                 "layout":{"line-cap":"round","line-join":"round"},
-                "paint":{"line-color":${trafficColor(c.route, "#ffb21e", "#f2453d", "#9b1622")},
+                "paint":{"line-color":${trafficColor(c.route, "#f5c518", "#f2453d", "#9b1622")},
                   "line-width":${linear(5 to 2.5, 12 to 5.5, 15 to 10, 17 to 15, 18 to 21)}}}"""
             )
             add(

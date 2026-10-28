@@ -96,6 +96,7 @@ object Router {
                         location = location,
                         startIndex = index,
                         lanes = lanes(s.optJSONArray("intersections")?.optJSONObject(0)?.optJSONArray("lanes")),
+                        exitNumber = s.optString("exits").substringBefore(';'),
                     )
                 )
             }

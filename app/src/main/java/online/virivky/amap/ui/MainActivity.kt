@@ -64,6 +64,7 @@ class MainActivity : Activity() {
     private lateinit var maneuverIcon: ImageView
     private lateinit var maneuverDistance: TextView
     private lateinit var maneuverRoad: TextView
+    private lateinit var maneuverBadge: TextView
     private lateinit var maneuverText: TextView
     private lateinit var lanesImage: ImageView
     private lateinit var mapControls: View
@@ -105,6 +106,7 @@ class MainActivity : Activity() {
         maneuverIcon = findViewById(R.id.maneuver_icon)
         maneuverDistance = findViewById(R.id.maneuver_distance)
         maneuverRoad = findViewById(R.id.maneuver_road)
+        maneuverBadge = findViewById(R.id.maneuver_badge)
         maneuverText = findViewById(R.id.maneuver_text)
         lanesImage = findViewById(R.id.lanes_image)
         mapControls = findViewById(R.id.map_controls)
@@ -469,6 +471,8 @@ class MainActivity : Activity() {
         val route = nav.route
         val p = nav.progress
         lanesImage.visibility = View.GONE
+        maneuverBadge.visibility = View.GONE
+        maneuverIcon.background = null
         if (nav.phase == Phase.ARRIVED) {
             maneuverIcon.setImageResource(R.drawable.ic_place)
             maneuverDistance.text = ""
@@ -486,7 +490,15 @@ class MainActivity : Activity() {
         val step = route.steps[p.nextStepIndex]
         maneuverIcon.setImageBitmap(ManeuverIcons.bitmap(step))
         maneuverDistance.text = distanceText(p.distanceToNextStep)
-        val road = Instructions.road(step)
+        if (Instructions.isHighway(step)) {
+            // Diaľnica: zelená ikona a štítok ako na zelených tabuliach.
+            maneuverIcon.setBackgroundResource(R.drawable.maneuver_tile_bg)
+            Instructions.exitLabel(step)?.let {
+                maneuverBadge.text = it
+                maneuverBadge.visibility = View.VISIBLE
+            }
+        }
+        val road = Instructions.signpost(step) ?: Instructions.road(step)
         maneuverRoad.text = road ?: Instructions.title(step)
         maneuverText.text = if (road != null) Instructions.title(step) else ""
         maneuverText.visibility = if (maneuverText.text.isNullOrEmpty()) View.GONE else View.VISIBLE

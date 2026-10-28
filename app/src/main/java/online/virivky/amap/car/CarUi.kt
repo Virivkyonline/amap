@@ -42,8 +42,11 @@ object CarUi {
             maneuver.setRoundaboutExitNumber(step.exit ?: 1)
         }
         maneuver.setIcon(CarIcon.Builder(IconCompat.createWithBitmap(ManeuverIcons.bitmap(step))).build())
-        val builder = Step.Builder(Instructions.title(step)).setManeuver(maneuver.build())
-        Instructions.road(step)?.let { builder.setRoad(it) }
+        // Na diaľnici: „Výjazd 12“ a ciele z tabule, ako na zelených tabuliach.
+        val highway = Instructions.isHighway(step)
+        val cue = (if (highway) Instructions.exitLabel(step) else null) ?: Instructions.title(step)
+        val builder = Step.Builder(cue).setManeuver(maneuver.build())
+        ((if (highway) Instructions.signpost(step) else null) ?: Instructions.road(step))?.let { builder.setRoad(it) }
         if (LaneIcons.useful(step.lanes)) {
             for (lane in step.lanes) {
                 val best = LaneIcons.recommended(lane, step.modifier)

@@ -4,6 +4,7 @@ import androidx.car.app.CarContext
 import androidx.car.app.Screen
 import androidx.car.app.model.Action
 import androidx.car.app.model.ActionStrip
+import androidx.car.app.model.CarColor
 import androidx.car.app.model.Template
 import androidx.car.app.navigation.model.MessageInfo
 import androidx.car.app.navigation.model.NavigationTemplate
@@ -41,6 +42,11 @@ class MapScreen(carContext: CarContext, private val map: CarMapSurface) : Screen
                     builder.setNavigationInfo(RoutingInfo.Builder().setLoading(true).build())
                 } else {
                     val step = route.steps[p.nextStepIndex]
+                    // Karta s pokynom: zelená pri diaľničnom zjazde, inak čierna.
+                    builder.setBackgroundColor(
+                        if (Instructions.isHighway(step)) CarColor.createCustom(0xFF1C8A57.toInt(), 0xFF1C8A57.toInt())
+                        else CarColor.createCustom(0xFF0B0D12.toInt(), 0xFF0B0D12.toInt())
+                    )
                     val info = RoutingInfo.Builder()
                         .setCurrentStep(CarUi.step(step), CarUi.distance(p.distanceToNextStep))
                     val then = route.steps.getOrNull(p.nextStepIndex + 1)

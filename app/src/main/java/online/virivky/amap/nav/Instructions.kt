@@ -42,7 +42,10 @@ object Instructions {
             "fork" -> side(m)?.let { "Na rozdvojení sa držte $it" } ?: "Na rozdvojení pokračujte rovno"
             "merge" -> side(m)?.let { "Zaraďte sa $it" } ?: "Zaraďte sa"
             "on ramp" -> side(m)?.let { "Odbočte $it na privádzač" } ?: "Pokračujte na privádzač"
-            "off ramp" -> side(m)?.let { "Použite výjazd $it" } ?: "Použite výjazd"
+            "off ramp" -> when {
+                step.exitNumber.isNotBlank() -> "Použite výjazd ${step.exitNumber}"
+                else -> side(m)?.let { "Použite výjazd $it" } ?: "Použite výjazd"
+            }
             "end of road" -> "Na konci cesty " + turn(m).replaceFirstChar { it.lowercase(SK) }
             "continue", "new name", "notification", "use lane" -> when (m) {
                 "slight left" -> "Držte sa vľavo"
@@ -58,6 +61,21 @@ object Instructions {
     fun phrase(step: RouteStep): String =
         if (step.type == "arrive") "budete v cieli"
         else title(step).replaceFirstChar { it.lowercase(SK) }
+
+    /** Manéver na diaľnici alebo rýchlostnej ceste (zjazd, nájazd, rozdvojenie s tabuľou). */
+    fun isHighway(step: RouteStep) =
+        step.type == "off ramp" || step.type == "on ramp" || (step.type == "fork" && step.destinations.isNotBlank())
+
+    /** Zelený štítok nad cieľmi z tabule, napr. „Výjazd 12“. */
+    fun exitLabel(step: RouteStep): String? = when {
+        step.type == "off ramp" -> if (step.exitNumber.isNotBlank()) "Výjazd ${step.exitNumber}" else "Výjazd"
+        step.type == "on ramp" -> "Nájazd"
+        else -> null
+    }
+
+    /** Ciele z dopravnej tabule veľkými písmenami („ŠIROKÉ, ŽILINA“). */
+    fun signpost(step: RouteStep): String? =
+        step.destinations.takeIf { it.isNotBlank() }?.uppercase(SK)
 
     /** Názov cesty, na ktorú sa odbočuje. */
     fun road(step: RouteStep): String? {

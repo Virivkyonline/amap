@@ -30,6 +30,8 @@ class RouteStep(
     /** Index bodu trasy, v ktorom sa manéver nachádza. */
     val startIndex: Int,
     val lanes: List<LaneInfo> = emptyList(),
+    /** Číslo výjazdu z diaľnice (z tabule), ak je známe. */
+    val exitNumber: String = "",
 )
 
 /** Aktuálny stav jazdy po trase. */

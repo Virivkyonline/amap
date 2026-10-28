@@ -92,9 +92,10 @@
 
                 <ImageView
                     android:id="@+id/maneuver_icon"
-                    android:layout_width="64dp"
-                    android:layout_height="64dp"
-                    android:contentDescription="Manéver" />
+                    android:layout_width="68dp"
+                    android:layout_height="68dp"
+                    android:contentDescription="Manéver"
+                    android:padding="4dp" />
 
                 <TextView
                     android:id="@+id/maneuver_distance"
@@ -114,6 +115,21 @@
                     android:layout_marginStart="14dp"
                     android:layout_weight="1"
                     android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/maneuver_badge"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="3dp"
+                        android:background="@drawable/exit_badge_bg"
+                        android:fontFamily="sans-serif-condensed"
+                        android:paddingStart="8dp"
+                        android:paddingTop="1dp"
+                        android:paddingEnd="8dp"
+                        android:paddingBottom="1dp"
+                        android:textColor="@android:color/white"
+                        android:textSize="17sp"
+                        android:visibility="gone" />
 
                     <TextView
                         android:id="@+id/maneuver_road"

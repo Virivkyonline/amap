@@ -132,6 +132,7 @@ object TomTom {
                     location = location,
                     startIndex = index,
                     lanes = if (laneIndex >= 0) laneSections[laneIndex].second else emptyList(),
+                    exitNumber = ins.optString("exitNumber"),
                 )
             )
         }

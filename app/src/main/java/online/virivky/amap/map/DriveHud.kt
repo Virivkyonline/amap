@@ -14,6 +14,7 @@ import online.virivky.amap.location.LocationTracker
 import online.virivky.amap.nav.Instructions
 import online.virivky.amap.nav.NavigationController
 import online.virivky.amap.nav.NavigationController.Phase
+import online.virivky.amap.nav.Route
 import kotlin.math.roundToInt
 
 /**
@@ -57,7 +58,7 @@ class DriveHud @JvmOverloads constructor(context: Context, attrs: AttributeSet? 
         nav.cameraDistance?.takeIf { navigating }?.let { drawCamera(canvas, x, y, it) }
 
         if (navigating) {
-            drawProgress(canvas, area, nav.progressFraction)
+            drawProgress(canvas, area, nav.progressFraction, nav.route)
             val road = nav.currentRoad
             val limit = nav.speedLimit
             if (road != null || limit != null) drawRoadName(canvas, area, road, limit)
@@ -118,8 +119,8 @@ class DriveHud @JvmOverloads constructor(context: Context, attrs: AttributeSet? 
         text.textAlign = Paint.Align.CENTER
     }
 
-    /** Zvislý pruh priebehu trasy vpravo (dole štart, hore cieľ). */
-    private fun drawProgress(canvas: Canvas, area: Rect, fraction: Float) {
+    /** Zvislý pruh priebehu trasy vpravo (dole štart, hore cieľ), zafarbený podľa premávky. */
+    private fun drawProgress(canvas: Canvas, area: Rect, fraction: Float, route: Route?) {
         val x = area.right - 14 * dp
         val top = area.top + 24 * dp
         val bottom = area.bottom - 70 * dp
@@ -129,6 +130,20 @@ class DriveHud @JvmOverloads constructor(context: Context, attrs: AttributeSet? 
         rect.set(x - w / 2, top, x + w / 2, bottom)
         fill.color = Color.rgb(0x22, 0xD3, 0x9A)
         canvas.drawRoundRect(rect, w / 2, w / 2, fill)
+        if (route != null && route.distance > 0) {
+            for (span in route.traffic) {
+                val from = (route.alongAtIndex(span.startIndex) / route.distance).toFloat()
+                val to = (route.alongAtIndex(span.endIndex) / route.distance).toFloat()
+                fill.color = when (span.level) {
+                    1 -> Color.rgb(0xF5, 0xC5, 0x18)
+                    2 -> Color.rgb(0xF2, 0x45, 0x3D)
+                    else -> Color.rgb(0x9B, 0x16, 0x22)
+                }
+                val y1 = bottom - (bottom - top) * to
+                val y2 = bottom - (bottom - top) * from
+                canvas.drawRect(x - w / 2, y1, x + w / 2, maxOf(y2, y1 + 2 * dp), fill)
+            }
+        }
         rect.set(x - w / 2, at, x + w / 2, bottom)
         fill.color = Color.argb(0xE6, 0xA9, 0xB6, 0xCB)
         canvas.drawRoundRect(rect, w / 2, w / 2, fill)

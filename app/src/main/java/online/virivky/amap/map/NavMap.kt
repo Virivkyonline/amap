@@ -35,6 +35,8 @@ class NavMap(private val context: Context, val map: MapLibreMap, dark: Boolean) 
     private var width = 0
     private var height = 0
     private var navZoom = 17.0
+    /** Kedy používateľ naposledy sám menil priblíženie (vtedy nemeníme zoom podľa rýchlosti). */
+    private var userZoomAt = 0L
     private var wasNavigating = false
     private var fittedRoute: Route? = null
     private var shownRoute: Route? = null
@@ -119,12 +121,14 @@ class NavMap(private val context: Context, val map: MapLibreMap, dark: Boolean) 
     fun zoomOut() = zoomBy(-1.0)
 
     private fun zoomBy(delta: Double) {
+        userZoomAt = android.os.SystemClock.elapsedRealtime()
         if (isNavigating()) navZoom = (navZoom + delta).coerceIn(12.0, 19.0)
         map.animateCamera(CameraUpdateFactory.zoomBy(delta), 250)
     }
 
     fun recenter() {
         setFollow(true)
+        userZoomAt = 0L
         if (isNavigating()) navZoom = 17.0
         else if (map.cameraPosition.zoom < 15) map.moveCamera(CameraUpdateFactory.zoomTo(15.0))
         update()
@@ -140,6 +144,7 @@ class NavMap(private val context: Context, val map: MapLibreMap, dark: Boolean) 
     fun scaleBy(focusX: Float, focusY: Float, factor: Float) {
         if (factor <= 0f) return
         val delta = ln(factor.toDouble()) / ln(2.0)
+        userZoomAt = android.os.SystemClock.elapsedRealtime()
         if (isNavigating()) navZoom = (navZoom + delta).coerceIn(12.0, 19.0)
         if (follow || focusX < 0 || focusY < 0) map.moveCamera(CameraUpdateFactory.zoomBy(delta))
         else map.moveCamera(CameraUpdateFactory.zoomBy(delta, Point(focusX.toInt(), focusY.toInt())))
@@ -272,12 +277,18 @@ class NavMap(private val context: Context, val map: MapLibreMap, dark: Boolean) 
         if (!follow || me == null) return
 
         val position = if (navigating) {
+            // Vo vyššej rýchlosti viac oddialiť a nakloniť, aby bolo vidieť ďalej dopredu.
+            val speed = (NavigationController.speedKmh ?: 0).toDouble()
+            if (android.os.SystemClock.elapsedRealtime() - userZoomAt > 20_000) {
+                navZoom = (17.3 - (speed - 40).coerceAtLeast(0.0) / 55).coerceIn(15.6, 17.3)
+            }
+            val tilt = (40 + (speed - 30).coerceAtLeast(0.0) * 0.3).coerceIn(40.0, 58.0)
             // Auto v dolnej časti voľnej plochy, mapa otočená v smere jazdy.
             CameraPosition.Builder()
                 .target(LatLng(me.lat, me.lon))
                 .zoom(navZoom)
                 .bearing((heading ?: map.cameraPosition.bearing.toFloat()).toDouble())
-                .tilt(35.0)
+                .tilt(tilt)
                 .padding(
                     area.left.toDouble(),
                     area.top + area.height() * 0.42,
