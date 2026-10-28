@@ -32,6 +32,7 @@ Vlastná navigácia pre Android, ktorá funguje aj v **Android Auto**.
   a trasa potom pokračuje do pôvodného cieľa
 - **parkovanie pri cieli**: 1,5 km pred cieľom sa na mape a v zozname ukážu parkoviská okolo
   cieľa; vybrané parkovisko sa stane novým cieľom bez prerušenia navigácie
+- **počasie v cieli** v čase príchodu (teplota, dážď, sneh, búrka) v náhľade trasy
 - **zdieľanie príchodu**: ťuknutím na čas v spodnej lište (alebo ikonou v náhľade trasy)
   pošleš cieľ, čas príchodu a svoju polohu cez SMS, WhatsApp a pod.
 - navigáciu spustenú v mobile vidno v aute a naopak
@@ -116,6 +117,7 @@ sa služby hľadajú v OpenStreetMap – nájdu sa tiež, len bez obsadenosti na
 | dopravné udalosti | TomTom Traffic Incidents (s kľúčom) |
 | služby, nabíjačky a ich obsadenosť | TomTom Search a EV Availability (s kľúčom), inak Overpass API |
 | rýchlostné limity, radary, semafory | Overpass API (overpass-api.de) |
+| počasie v cieli | Open-Meteo (api.open-meteo.com) |
 | hlas | prevod textu na reč v telefóne (slovenčina, inak čeština) |
 
 Sú to bezplatné verejné služby OpenStreetMap určené na bežné osobné použitie.

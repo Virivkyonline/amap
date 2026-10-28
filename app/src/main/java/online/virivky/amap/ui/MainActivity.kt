@@ -852,6 +852,7 @@ class MainActivity : Activity() {
                         "${Instructions.displayDuration(route.duration)} · ${Instructions.displayDistance(route.distance)}$delay",
                         if (route.live) "Podľa živej premávky (TomTom)" else null,
                         Settings.routeOptions.label.ifBlank { null }?.replaceFirstChar { it.uppercase() },
+                        nav.destinationWeather?.let { "Počasie v cieli ${it.label}" },
                         nav.destination?.address?.ifBlank { null },
                     ).joinToString("\n")
                     primaryButton.text = "Navigovať"

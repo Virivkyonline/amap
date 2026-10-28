@@ -88,6 +88,8 @@ class RoutePreviewScreen(carContext: CarContext) : Screen(carContext) {
                     Settings.routeOptions.label.ifBlank { null },
                 ).joinToString(" · ")
                 row.addText(text.ifBlank { destination?.address?.ifBlank { null } ?: "Trasa" })
+                // Počasie v cieli pri prvom variante.
+                if (r === routes.first()) nav.destinationWeather?.let { row.addText("Počasie v cieli ${it.label}") }
                 list.addItem(row.build())
             }
             builder.setItemList(

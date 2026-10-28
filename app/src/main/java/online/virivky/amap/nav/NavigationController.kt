@@ -15,6 +15,8 @@ import online.virivky.amap.location.LocationTracker
 import online.virivky.amap.net.Incident
 import online.virivky.amap.net.RoadData
 import online.virivky.amap.net.Router
+import online.virivky.amap.net.Weather
+import online.virivky.amap.net.WeatherInfo
 import online.virivky.amap.util.Bg
 import java.util.concurrent.CopyOnWriteArraySet
 import kotlin.math.max
@@ -85,6 +87,12 @@ object NavigationController {
         private set
     var tunnelDistance: Double? = null
         private set
+
+    /** Počasie v cieli v čase príchodu (Open-Meteo). */
+    var destinationWeather: WeatherInfo? = null
+        private set
+    private var weatherFor: Place? = null
+    private var weatherRequest = 0
 
     /** Blížime sa k cieľu (posledných 1,5 km) – ukážu sa parkoviská pri cieli. */
     var nearDestination = false
@@ -196,6 +204,20 @@ object NavigationController {
         notifyChanged()
     }
 
+    /** Predpoveď v cieli pre čas príchodu (raz pre každý cieľ). */
+    private fun loadWeather(target: Place, seconds: Double) {
+        if (weatherFor == target) return
+        weatherFor = target
+        destinationWeather = null
+        val id = ++weatherRequest
+        val arrival = java.time.Instant.now().plusSeconds(seconds.toLong())
+        Bg.run({ Weather.at(target.point, arrival) }) { result ->
+            if (id != weatherRequest || destination != target) return@run
+            destinationWeather = result.getOrNull()
+            notifyChanged()
+        }
+    }
+
     /** Výber iného variantu trasy v náhľade. */
     fun selectRoute(index: Int) {
         if (phase != Phase.PREVIEW) return
@@ -293,6 +315,8 @@ object NavigationController {
         via = null
         route = null
         routes = emptyList()
+        destinationWeather = null
+        weatherFor = null
         progress = null
         error = null
         rerouting = false
@@ -361,6 +385,7 @@ object NavigationController {
             rerouting = false
             result.onSuccess { found ->
                 val newRoute = found.first()
+                loadWeather(target, newRoute.duration)
                 route = newRoute
                 routes = if (phase == Phase.NAVIGATING) emptyList() else found
                 error = null
