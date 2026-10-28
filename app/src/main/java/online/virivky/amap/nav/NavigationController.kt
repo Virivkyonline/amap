@@ -170,7 +170,8 @@ object NavigationController {
         get() {
             val limit = speedLimit ?: return false
             val speed = speedKmh ?: return false
-            return speed > limit + max(3, limit / 10)
+            val tolerance = Settings.speedTolerance.takeIf { it >= 0 } ?: max(3, limit / 10)
+            return speed > limit + tolerance
         }
 
     var voiceEnabled: Boolean
@@ -567,7 +568,7 @@ object NavigationController {
             incidentDistance = max(0.0, toIncident)
             val warnAt = max(1200.0, (speedMps ?: 0.0) * 50)
             if (toIncident < warnAt && toIncident > 50 && announced.add("incident-${incident.incident.id}")) {
-                speak("Pozor, o ${Instructions.spokenDistance(toIncident)} ${incident.incident.spoken}.", interrupt = false)
+                warn(Settings.warnIncidents, "Pozor, o ${Instructions.spokenDistance(toIncident)} ${incident.incident.spoken}.")
             }
         } else {
             incidentAhead = null
@@ -581,7 +582,7 @@ object NavigationController {
             cameraDistance = max(0.0, distance)
             val speed = speedMps ?: 0.0
             if (distance < max(300.0, speed * 20) && announced.add("camera-${(camera.point.lat * 1e5).roundToInt()},${(camera.point.lon * 1e5).roundToInt()}")) {
-                speak("Pozor, radar" + (camera.limit?.let { ", rýchlosť $it." } ?: "."), interrupt = false)
+                warn(Settings.warnCameras, "Pozor, radar" + (camera.limit?.let { ", rýchlosť $it." } ?: "."))
             }
         } else {
             cameraAhead = null
@@ -591,7 +592,7 @@ object NavigationController {
         val now = SystemClock.elapsedRealtime()
         if (overSpeed && now - lastSpeedWarningAt > 60_000) {
             lastSpeedWarningAt = now
-            speak("Prekračujete rýchlosť.", interrupt = false)
+            warn(Settings.warnSpeed, "Prekračujete rýchlosť.")
         }
     }
 
@@ -604,7 +605,7 @@ object NavigationController {
                 sectionEnteredAt = now
                 sectionEnteredAlong = p.traveled
                 if (announced.add("section-in-${inside.startAlong.roundToInt()}")) {
-                    speak("Začína úsekové meranie rýchlosti" + (inside.limit?.let { ", limit $it." } ?: "."), interrupt = false)
+                    warn(Settings.warnCameras, "Začína úsekové meranie rýchlosti" + (inside.limit?.let { ", limit $it." } ?: "."))
                 }
             }
             speedSection = inside
@@ -616,12 +617,12 @@ object NavigationController {
             val limit = inside.limit
             if (average != null && limit != null && average > limit + 2 && now - sectionWarningAt > 60_000) {
                 sectionWarningAt = now
-                speak("Priemerná rýchlosť v úseku je $average, limit $limit.", interrupt = false)
+                warn(Settings.warnCameras, "Priemerná rýchlosť v úseku je $average, limit $limit.")
             }
             return
         }
         if (inSection) {
-            speedSection?.let { if (announced.add("section-out-${it.startAlong.roundToInt()}")) speak("Koniec úsekového merania.", interrupt = false) }
+            speedSection?.let { if (announced.add("section-out-${it.startAlong.roundToInt()}")) warn(Settings.warnCameras, "Koniec úsekového merania.") }
             inSection = false
             sectionAverage = null
         }
@@ -631,7 +632,7 @@ object NavigationController {
             speedSection = next
             sectionDistance = distance
             if (distance < max(400.0, (speedMps ?: 0.0) * 20) && announced.add("section-${next.startAlong.roundToInt()}")) {
-                speak("Pozor, o ${Instructions.spokenDistance(distance)} začína úsekové meranie rýchlosti.", interrupt = false)
+                warn(Settings.warnCameras, "Pozor, o ${Instructions.spokenDistance(distance)} začína úsekové meranie rýchlosti.")
                 // Hlásenie začiatku už netreba opakovať.
                 announced.add("section-in-${next.startAlong.roundToInt()}")
             }
@@ -659,6 +660,11 @@ object NavigationController {
         } else if (d in near * 1.6..far && announced.add("far-$key")) {
             speak("O ${Instructions.spokenDistance(d)} ${Instructions.phrase(step)}.")
         }
+    }
+
+    /** Upozornenie, ak ho používateľ v nastaveniach nevypol (neprerušuje pokyny). */
+    private fun warn(enabled: Boolean, text: String) {
+        if (enabled) speak(text, interrupt = false)
     }
 
     private fun speak(text: String, interrupt: Boolean = true) {

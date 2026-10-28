@@ -29,6 +29,24 @@ object Settings {
             listeners.forEach { it() }
         }
 
+    /** Hlasové upozornenia: radary a úsekové merania, dopravné udalosti, prekročenie rýchlosti. */
+    var warnCameras: Boolean
+        get() = prefs.getBoolean("warn_cameras", true)
+        set(value) = prefs.edit().putBoolean("warn_cameras", value).apply()
+
+    var warnIncidents: Boolean
+        get() = prefs.getBoolean("warn_incidents", true)
+        set(value) = prefs.edit().putBoolean("warn_incidents", value).apply()
+
+    var warnSpeed: Boolean
+        get() = prefs.getBoolean("warn_speed", true)
+        set(value) = prefs.edit().putBoolean("warn_speed", value).apply()
+
+    /** O koľko km/h smie rýchlosť prekročiť limit; -1 = automaticky (10 %, aspoň 3 km/h). */
+    var speedTolerance: Int
+        get() = prefs.getInt("speed_tolerance", -1)
+        set(value) = prefs.edit().putInt("speed_tolerance", value).apply()
+
     /** Pohľad na mapu počas navigácie (3D, 2D v smere jazdy, 2D sever hore). */
     var mapPerspective: MapPerspective
         get() = MapPerspective.entries.firstOrNull { it.name == prefs.getString("map_view", null) } ?: MapPerspective.THREE_D

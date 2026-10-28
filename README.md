@@ -40,6 +40,9 @@ Vlastná navigácia pre Android, ktorá funguje aj v **Android Auto**.
   pošleš cieľ, čas príchodu a svoju polohu cez SMS, WhatsApp a pod.
 - navigáciu spustenú v mobile vidno v aute a naopak
 - dlhé podržanie prsta na mape v mobile = navigovať na to miesto
+- **nastavenia** (ozubené koliesko): kľúč TomTom, premávka na mape, farby mapy, ktoré hlasové
+  upozornenia chceš (radary a úsekové merania, dopravné udalosti, rýchlosť) a tolerancia
+  rýchlosti (auto, +0, +5, +10 km/h)
 
 ## Inštalácia
 

@@ -926,6 +926,37 @@ class MainActivity : Activity() {
                 isChecked = Settings.mapTheme == theme
             })
         }
+        val warningsLabel = TextView(this).apply {
+            text = "Hlasové upozornenia"
+            textSize = 15f
+            setPadding(0, padding / 2, 0, 0)
+        }
+        val warnCameras = CheckBox(this).apply {
+            text = "Radary a úsekové merania"
+            isChecked = Settings.warnCameras
+        }
+        val warnIncidents = CheckBox(this).apply {
+            text = "Nehody, uzávierky a zápchy"
+            isChecked = Settings.warnIncidents
+        }
+        val warnSpeed = CheckBox(this).apply {
+            text = "Prekročenie rýchlosti"
+            isChecked = Settings.warnSpeed
+        }
+        val toleranceLabel = TextView(this).apply {
+            text = "Tolerancia rýchlosti"
+            textSize = 15f
+            setPadding(0, padding / 2, 0, 0)
+        }
+        val toleranceValues = intArrayOf(-1, 0, 5, 10)
+        val tolerance = android.widget.RadioGroup(this).apply { orientation = LinearLayout.HORIZONTAL }
+        toleranceValues.forEachIndexed { i, value ->
+            tolerance.addView(android.widget.RadioButton(this).apply {
+                id = 2000 + i
+                text = if (value < 0) "auto" else "+$value"
+                isChecked = Settings.speedTolerance == value
+            })
+        }
         val status = TextView(this).apply {
             text = Router.lastTomTomError.orEmpty()
             setTextColor(getColor(R.color.amap_red))
@@ -938,6 +969,12 @@ class MainActivity : Activity() {
             addView(showTraffic)
             addView(themeLabel)
             addView(themes)
+            addView(warningsLabel)
+            addView(warnCameras)
+            addView(warnIncidents)
+            addView(warnSpeed)
+            addView(toleranceLabel)
+            addView(tolerance)
             addView(status)
         }
         AlertDialog.Builder(this)
@@ -946,6 +983,10 @@ class MainActivity : Activity() {
             .setPositiveButton("Uložiť") { _, _ ->
                 val key = keyInput.text.toString().trim()
                 MapTheme.entries.getOrNull(themes.checkedRadioButtonId - 1000)?.let { Settings.mapTheme = it }
+                Settings.warnCameras = warnCameras.isChecked
+                Settings.warnIncidents = warnIncidents.isChecked
+                Settings.warnSpeed = warnSpeed.isChecked
+                toleranceValues.getOrNull(tolerance.checkedRadioButtonId - 2000)?.let { Settings.speedTolerance = it }
                 Settings.showTraffic = showTraffic.isChecked
                 Settings.tomtomKey = key.ifEmpty { null }
                 if (key.isNotEmpty()) {
