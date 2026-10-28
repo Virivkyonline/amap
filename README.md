@@ -12,6 +12,9 @@ Vlastná navigácia pre Android, ktorá funguje aj v **Android Auto**.
 - **Domov a Práca** (uložíš hviezdičkou v náhľade trasy alebo podržaním výsledku),
   nedávne ciele, adresa bodu po podržaní prsta na mape
 - výpočet trasy autom a navigácia odbočka po odbočke
+- **viac variantov trasy** v náhľade (čas, km, hlavná cesta) – vyberieš ťuknutím na kartu
+  alebo na sivú trasu na mape; **možnosti trasy**: bez diaľnic, bez spoplatnených úsekov
+  (diaľničná známka), bez trajektov
 - slovenské hlasové pokyny, automatický prepočet trasy pri zídení z cesty
 - jazdné pruhy pred odbočkou (ktorým pruhom ísť)
 - rýchlostný limit a aktuálna rýchlosť, pri prekročení červená a hlasové upozornenie
@@ -86,7 +89,8 @@ sa služby hľadajú v OpenStreetMap – nájdu sa tiež, len bez obsadenosti na
 
 - **Hľadať** – zadanie cieľa (počas jazdy auto písanie nedovolí, preto sú hneď
   zobrazené nedávne ciele; ciele sa dajú vyhľadať aj v mobile pred jazdou)
-- **Štart** – spustí navigáciu, **Ukončiť** ju zastaví
+- **Štart** – spustí navigáciu, **Ukončiť** ju zastaví; v náhľade sa dá vybrať variant trasy
+  a cez **Možnosti** vypnúť diaľnice, spoplatnené úseky či trajekty
 - **Služby** (ikona nabíjačky) – vyber druh (nabíjačky, pumpy, …), zoznam sa ukáže vľavo
   a miesta na mape. Mimo navigácie ťuk na miesto = trasa k nemu; počas navigácie sa
   pridá ako zastávka. Zastávku zrušíš v Službách tlačidlom **Zrušiť zastávku**.

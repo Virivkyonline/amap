@@ -10,6 +10,7 @@ import online.virivky.amap.data.Settings
 import online.virivky.amap.geo.Geo
 import online.virivky.amap.geo.GeoPoint
 import online.virivky.amap.location.LocationTracker
+import online.virivky.amap.nav.Instructions
 import online.virivky.amap.nav.NavigationController
 import online.virivky.amap.nav.NavigationController.Phase
 import online.virivky.amap.nav.Route
@@ -52,6 +53,8 @@ class NavMap(private val context: Context, val map: MapLibreMap, dark: Boolean) 
     private var shownVia: GeoPoint? = null
     private var shownPois: List<Poi>? = null
     private var fittedPois: List<Poi>? = null
+    private var shownAlternatives: List<Route>? = null
+    private var shownSelected: Route? = null
     private var trafficKey = Settings.trafficLayerKey
     private val settingsListener: () -> Unit = {
         val key = Settings.trafficLayerKey
@@ -98,6 +101,7 @@ class NavMap(private val context: Context, val map: MapLibreMap, dark: Boolean) 
             shownDestination = null
             shownVia = null
             shownPois = null
+            shownAlternatives = null
             update()
         }
     }
@@ -231,6 +235,32 @@ class NavMap(private val context: Context, val map: MapLibreMap, dark: Boolean) 
             shownSignals = signals
         }
 
+        // Varianty trasy v náhľade: ostatné sivo, pri každom čas jazdy.
+        val alternatives = if (nav.phase == Phase.PREVIEW) nav.routes else emptyList()
+        if (alternatives !== shownAlternatives || route !== shownSelected) {
+            s.getSourceAs<GeoJsonSource>("alternatives")?.setGeoJson(
+                if (alternatives.size < 2) EMPTY
+                else """{"type":"FeatureCollection","features":[${
+                    alternatives.withIndex().filter { it.value !== route }.joinToString(",") { (i, r) ->
+                        """{"type":"Feature","properties":{"i":$i},"geometry":{"type":"LineString","coordinates":[${r.points.joinToString(",") { coord(it) }}]}}"""
+                    }
+                }]}"""
+            )
+            s.getSourceAs<GeoJsonSource>("route-labels")?.setGeoJson(
+                if (alternatives.size < 2) EMPTY
+                else """{"type":"FeatureCollection","features":[${
+                    alternatives.joinToString(",") { r ->
+                        point(
+                            labelPoint(r, alternatives),
+                            """"label":${JSONObject.quote(Instructions.displayDuration(r.duration))},"selected":${if (r === route) 1 else 0}""",
+                        )
+                    }
+                }]}"""
+            )
+            shownAlternatives = alternatives
+            shownSelected = route
+        }
+
         val via = nav.via?.point
         if (via != shownVia) {
             s.getSourceAs<GeoJsonSource>("via")?.setGeoJson(via?.let { point(it) } ?: EMPTY)
@@ -275,6 +305,29 @@ class NavMap(private val context: Context, val map: MapLibreMap, dark: Boolean) 
 
         updateCamera(navigating, route, me, heading, animate)
         wasNavigating = navigating
+    }
+
+    /** Variant trasy pod bodom obrazovky (index v [NavigationController.routes]). */
+    fun alternativeAt(x: Float, y: Float): Int? {
+        val r = 16 * context.resources.displayMetrics.density
+        val features = map.queryRenderedFeatures(RectF(x - r, y - r, x + r, y + r), "alt-line", "alt-casing")
+        return features.firstOrNull()?.getNumberProperty("i")?.toInt()
+    }
+
+    /** Miesto pre popis variantu: kde je najďalej od ostatných variantov. */
+    private fun labelPoint(r: Route, all: List<Route>): GeoPoint {
+        val others = all.filter { it !== r }
+        var best = r.pointAt(r.distance / 2)
+        var bestGap = -1.0
+        for (k in 1..19) {
+            val p = r.pointAt(r.distance * k / 20)
+            val gap = others.minOfOrNull { it.distanceTo(p) } ?: 0.0
+            if (gap > bestGap) {
+                bestGap = gap
+                best = p
+            }
+        }
+        return best
     }
 
     /** Služba pod bodom obrazovky (napr. po ťuknutí na mapu). */
@@ -327,7 +380,8 @@ class NavMap(private val context: Context, val map: MapLibreMap, dark: Boolean) 
 
         if (!navigating && NavigationController.phase == Phase.PREVIEW && route != null && route !== fittedRoute) {
             fittedRoute = route
-            fit(route.points + listOfNotNull(me))
+            // Všetky varianty trasy naraz.
+            fit(NavigationController.routes.flatMap { it.points }.ifEmpty { route.points } + listOfNotNull(me))
             return
         }
         if (NavigationController.phase == Phase.IDLE) fittedRoute = null

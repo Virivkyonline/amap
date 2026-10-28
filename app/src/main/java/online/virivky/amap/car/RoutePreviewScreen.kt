@@ -5,6 +5,7 @@ import android.text.SpannableString
 import androidx.car.app.CarContext
 import androidx.car.app.Screen
 import androidx.car.app.model.Action
+import androidx.car.app.model.ActionStrip
 import androidx.car.app.model.DurationSpan
 import androidx.car.app.model.ItemList
 import androidx.car.app.model.MessageTemplate
@@ -13,6 +14,8 @@ import androidx.car.app.model.Template
 import androidx.car.app.navigation.model.RoutePreviewNavigationTemplate
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
+import online.virivky.amap.R
+import online.virivky.amap.data.Settings
 import online.virivky.amap.nav.Instructions
 import online.virivky.amap.nav.NavigationController
 import online.virivky.amap.nav.NavigationController.Phase
@@ -56,20 +59,40 @@ class RoutePreviewScreen(carContext: CarContext) : Screen(carContext) {
         val builder = RoutePreviewNavigationTemplate.Builder()
             .setTitle(title)
             .setHeaderAction(Action.BACK)
+            .setActionStrip(
+                ActionStrip.Builder()
+                    .addAction(
+                        Action.Builder()
+                            .setTitle("Možnosti")
+                            .setIcon(carContext.carIcon(R.drawable.ic_tune))
+                            .setOnClickListener { screenManager.push(RouteOptionsScreen(carContext)) }
+                            .build()
+                    )
+                    .build()
+            )
 
         if (route == null || nav.phase != Phase.PREVIEW) {
             builder.setLoading(true)
         } else {
-            // Prvý znak nahradí Android Auto naformátovaným časom jazdy.
-            val label = SpannableString("  · ${Instructions.displayDistance(route.distance)}")
-            label.setSpan(DurationSpan.create(route.duration.toLong()), 0, 1, Spannable.SPAN_INCLUSIVE_INCLUSIVE)
-            val row = Row.Builder().setTitle(label)
-            destination?.address?.ifBlank { null }?.let { row.addText(it) }
+            // Varianty trasy; vybraný sa ukáže na mape. Prvý znak nahradí Android Auto časom jazdy.
+            val routes = nav.routes.ifEmpty { listOf(route) }
+            val fastest = routes.minOf { it.duration }
+            val list = ItemList.Builder()
+            routes.forEach { r ->
+                val label = SpannableString("  · ${Instructions.displayDistance(r.distance)}")
+                label.setSpan(DurationSpan.create(r.duration.toLong()), 0, 1, Spannable.SPAN_INCLUSIVE_INCLUSIVE)
+                val row = Row.Builder().setTitle(label)
+                val text = listOfNotNull(
+                    r.mainRoad.ifBlank { null }?.let { "cez $it" },
+                    "najrýchlejšia".takeIf { routes.size > 1 && r.duration == fastest },
+                    Settings.routeOptions.label.ifBlank { null },
+                ).joinToString(" · ")
+                row.addText(text.ifBlank { destination?.address?.ifBlank { null } ?: "Trasa" })
+                list.addItem(row.build())
+            }
             builder.setItemList(
-                ItemList.Builder()
-                    .addItem(row.build())
-                    .setSelectedIndex(0)
-                    .setOnSelectedListener { }
+                list.setSelectedIndex(nav.selectedRouteIndex.coerceAtLeast(0))
+                    .setOnSelectedListener { index -> nav.selectRoute(index) }
                     .build()
             )
             builder.setNavigateAction(

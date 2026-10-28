@@ -351,6 +351,15 @@
                     android:textStyle="bold" />
 
                 <ImageButton
+                    android:id="@+id/route_prefs"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:background="?android:attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="Možnosti trasy"
+                    android:src="@drawable/ic_tune"
+                    android:tint="@color/panel_text_secondary" />
+
+                <ImageButton
                     android:id="@+id/save_place"
                     android:layout_width="40dp"
                     android:layout_height="40dp"
@@ -369,6 +378,14 @@
                 android:maxLines="3"
                 android:textColor="@color/panel_text_secondary"
                 android:textSize="15sp" />
+
+            <LinearLayout
+                android:id="@+id/route_choices"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:orientation="horizontal"
+                android:visibility="gone" />
 
             <LinearLayout
                 android:layout_width="match_parent"

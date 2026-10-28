@@ -29,6 +29,21 @@ object Settings {
             listeners.forEach { it() }
         }
 
+    /** Čomu sa vyhýbať pri výpočte trasy. */
+    var routeOptions: RouteOptions
+        get() = RouteOptions(
+            avoidMotorways = prefs.getBoolean("avoid_motorways", false),
+            avoidTolls = prefs.getBoolean("avoid_tolls", false),
+            avoidFerries = prefs.getBoolean("avoid_ferries", false),
+        )
+        set(value) {
+            prefs.edit()
+                .putBoolean("avoid_motorways", value.avoidMotorways)
+                .putBoolean("avoid_tolls", value.avoidTolls)
+                .putBoolean("avoid_ferries", value.avoidFerries)
+                .apply()
+        }
+
     /** Naposledy zvolené kritériá hľadania (oblasť a poradie). */
     var searchOptions: SearchOptions
         get() = SearchOptions(

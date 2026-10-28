@@ -234,6 +234,20 @@ object MapStyle {
                 "paint":{"line-color":"#e5333a","line-width":1.3,"line-opacity":0.85}}"""
             )
 
+            // Iné varianty trasy v náhľade (sivé, ťuknutím sa vyberú).
+            add(
+                """{"id":"alt-casing","type":"line","source":"alternatives",
+                "layout":{"line-cap":"round","line-join":"round"},
+                "paint":{"line-color":"${if (dark) "#4b5567" else "#8f9aab"}",
+                  "line-width":${linear(5 to 4, 12 to 8, 15 to 12, 17 to 17, 18 to 23)}}}"""
+            )
+            add(
+                """{"id":"alt-line","type":"line","source":"alternatives",
+                "layout":{"line-cap":"round","line-join":"round"},
+                "paint":{"line-color":"${if (dark) "#8792a6" else "#c5cdd8"}",
+                  "line-width":${linear(5 to 2.5, 12 to 5, 15 to 8.5, 17 to 13, 18 to 18)}}}"""
+            )
+
             // Cesta, po ktorej vedie trasa, zvýraznená tyrkysovou (ako v AMap).
             add(
                 """{"id":"route-corridor","type":"line","source":"route","minzoom":12,
@@ -314,6 +328,16 @@ object MapStyle {
                   "icon-allow-overlap":true,"icon-ignore-placement":true}}"""
             )
 
+            // Čas jazdy pri variantoch trasy (vybraná zelenou).
+            add(
+                """{"id":"route-labels","type":"symbol","source":"route-labels",
+                "layout":{"text-field":["get","label"],"text-font":["Noto Sans Bold"],"text-size":14,
+                  "text-allow-overlap":true,"text-ignore-placement":true},
+                "paint":{"text-color":["case",["==",["get","selected"],1],"#ffffff","#1f2430"],
+                  "text-halo-color":["case",["==",["get","selected"],1],"${c.routeCasing}","#ffffff"],
+                  "text-halo-width":4}}"""
+            )
+
             // Služby (nabíjačky, pumpy, …); názvy až pri väčšom priblížení.
             add(
                 """{"id":"pois","type":"symbol","source":"pois",
@@ -360,7 +384,10 @@ object MapStyle {
             ""","traffic":{"type":"raster","tileSize":256,"minzoom":5,"maxzoom":22,"attribution":"© TomTom",
               "tiles":["https://api.tomtom.com/traffic/map/4/tile/flow/$style/{z}/{x}/{y}.png?key=$key&tileSize=512&thickness=8"]}"""
         }
-        val sources = listOf("route", "arrow", "arrowhead", "cameras", "signals", "pois", "via", "destination", "destination-line", "me")
+        val sources = listOf(
+            "route", "alternatives", "route-labels", "arrow", "arrowhead", "cameras", "signals", "pois", "via",
+            "destination", "destination-line", "me",
+        )
             .joinToString(",") { """"$it":{"type":"geojson","data":$EMPTY}""" } +
             ""","route-head":{"type":"geojson","lineMetrics":true,"data":$EMPTY}""" + traffic
 

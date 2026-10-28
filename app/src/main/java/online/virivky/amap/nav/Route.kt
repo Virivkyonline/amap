@@ -139,6 +139,21 @@ class Route(
 
     private fun alongAt(step: RouteStep) = cumulative[step.startIndex.coerceIn(0, points.size - 1)]
 
+    /** Hlavná cesta trasy (napr. „D1“) – na odlíšenie variantov. */
+    val mainRoad: String by lazy {
+        steps.map { step -> (step.ref.split(';', ' ').firstOrNull { it.isNotBlank() } ?: step.name) to step.distance }
+            .filter { it.first.isNotBlank() }
+            .groupBy({ it.first }, { it.second })
+            .maxByOrNull { (_, lengths) -> lengths.sum() }?.key.orEmpty()
+    }
+
+    /** Najkratšia vzdialenosť bodu od trasy v metroch. */
+    fun distanceTo(p: GeoPoint): Double {
+        var best = Double.MAX_VALUE
+        for (i in 0 until points.size - 1) best = min(best, Geo.pointToSegment(p, points[i], points[i + 1]).distance)
+        return best
+    }
+
     /** Vzdialenosť od začiatku trasy k bodu, ak leží najviac [maxDistance] m od trasy. */
     fun alongOf(p: GeoPoint, maxDistance: Double): Double? {
         var best = maxDistance

@@ -20,6 +20,9 @@ import android.text.SpannableString
 import android.text.Spanned
 import android.text.style.AbsoluteSizeSpan
 import android.text.style.ForegroundColorSpan
+import android.text.style.StyleSpan
+import android.text.SpannableStringBuilder
+import android.graphics.Typeface
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
@@ -40,6 +43,7 @@ import online.virivky.amap.data.Place
 import online.virivky.amap.data.Poi
 import online.virivky.amap.data.PoiCategory
 import online.virivky.amap.data.Recents
+import online.virivky.amap.data.RouteOptions
 import online.virivky.amap.data.SearchArea
 import online.virivky.amap.data.SearchOptions
 import online.virivky.amap.data.SearchSort
@@ -112,6 +116,7 @@ class MainActivity : Activity() {
     private var servicesOpen = false
 
     private lateinit var searchFilters: View
+    private lateinit var routeChoices: LinearLayout
     private lateinit var areaChip: TextView
     private lateinit var sortChip: TextView
     private lateinit var openChip: TextView
@@ -180,6 +185,7 @@ class MainActivity : Activity() {
         poiStatus = findViewById(R.id.poi_status)
         poiList = findViewById(R.id.poi_list)
         searchFilters = findViewById(R.id.search_filters)
+        routeChoices = findViewById(R.id.route_choices)
         hud.showAttribution = true
         buildCategories()
         buildFilters()
@@ -201,8 +207,13 @@ class MainActivity : Activity() {
                     hideKeyboard()
                     val screen = map.projection.toScreenLocation(latLng)
                     val poi = controller.poiAt(screen.x, screen.y)
-                    if (poi != null) choosePoi(poi)
-                    poi != null
+                    // Ťuk na sivý variant trasy ho vyberie.
+                    val alternative = if (poi == null && nav.phase == Phase.PREVIEW) controller.alternativeAt(screen.x, screen.y) else null
+                    when {
+                        poi != null -> choosePoi(poi)
+                        alternative != null -> nav.selectRoute(alternative)
+                    }
+                    poi != null || alternative != null
                 }
             }
             updateViewport()
@@ -222,6 +233,7 @@ class MainActivity : Activity() {
             true
         }
         findViewById<View>(R.id.save_place).setOnClickListener { nav.destination?.let { savePlaceDialog(it) } }
+        findViewById<View>(R.id.route_prefs).setOnClickListener { showRouteOptions() }
         searchInput.setOnEditorActionListener { _, actionId, event ->
             if (actionId == EditorInfo.IME_ACTION_SEARCH || event?.keyCode == KeyEvent.KEYCODE_ENTER) {
                 search()
@@ -471,6 +483,64 @@ class MainActivity : Activity() {
         style(openChip, searchOptions.openNow)
     }
 
+    /** Varianty trasy v náhľade: čas, dĺžka a hlavná cesta; ťuknutím sa vyberú. */
+    private fun renderRouteChoices() {
+        val routes = if (nav.phase == Phase.PREVIEW) nav.routes else emptyList()
+        routeChoices.removeAllViews()
+        if (routes.size < 2) {
+            routeChoices.visibility = View.GONE
+            return
+        }
+        routeChoices.visibility = View.VISIBLE
+        val d = resources.displayMetrics.density
+        val fastest = routes.minOf { it.duration }
+        routes.forEachIndexed { i, r ->
+            val selected = r === nav.route
+            val time = Instructions.displayDuration(r.duration)
+            val label = SpannableStringBuilder(time)
+            label.setSpan(StyleSpan(Typeface.BOLD), 0, time.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            label.setSpan(AbsoluteSizeSpan(17, true), 0, time.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            label.append("\n").append(Instructions.displayDistance(r.distance))
+            r.mainRoad.ifBlank { null }?.let { label.append(" · cez ").append(it) }
+            if (r.duration == fastest) label.append("\nNajrýchlejšia")
+            val card = TextView(this).apply {
+                setText(label)
+                textSize = 13f
+                setTextColor(if (selected) Color.WHITE else getColor(R.color.panel_text))
+                background = GradientDrawable().apply {
+                    cornerRadius = 12 * d
+                    setColor(if (selected) getColor(R.color.amap_blue) else 0x1A808080)
+                }
+                setPadding((10 * d).toInt(), (8 * d).toInt(), (10 * d).toInt(), (8 * d).toInt())
+                setOnClickListener { nav.selectRoute(i) }
+            }
+            routeChoices.addView(card, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                if (i > 0) marginStart = (8 * d).toInt()
+            })
+        }
+    }
+
+    /** Čomu sa má trasa vyhnúť; po zmene sa trasa prepočíta. */
+    private fun showRouteOptions() {
+        val current = Settings.routeOptions
+        val checked = booleanArrayOf(current.avoidMotorways, current.avoidTolls, current.avoidFerries)
+        AlertDialog.Builder(this)
+            .setTitle("Možnosti trasy")
+            .setMultiChoiceItems(
+                arrayOf("Vyhnúť sa diaľniciam", "Vyhnúť sa spoplatneným úsekom (diaľničná známka)", "Vyhnúť sa trajektom"),
+                checked,
+            ) { _, which, isChecked -> checked[which] = isChecked }
+            .setPositiveButton("Použiť") { _, _ ->
+                val options = RouteOptions(checked[0], checked[1], checked[2])
+                if (options != current) {
+                    Settings.routeOptions = options
+                    nav.retry()
+                }
+            }
+            .setNegativeButton("Zrušiť", null)
+            .show()
+    }
+
     /** Uloženie miesta ako Domov či Práca (a odstránenie z nedávnych). */
     private fun savePlaceDialog(place: Place, fromRecents: Boolean = false) {
         val items = mutableListOf("Uložiť ako Domov", "Uložiť ako Prácu")
@@ -675,6 +745,7 @@ class MainActivity : Activity() {
         if (phase != Phase.NAVIGATING) servicesOpen = false
         updateSearchUi()
         renderServices()
+        renderRouteChoices()
 
         when (phase) {
             Phase.IDLE -> Unit
@@ -700,6 +771,7 @@ class MainActivity : Activity() {
                     panelSubtitle.text = listOfNotNull(
                         "${Instructions.displayDuration(route.duration)} · ${Instructions.displayDistance(route.distance)}$delay",
                         if (route.live) "Podľa živej premávky (TomTom)" else null,
+                        Settings.routeOptions.label.ifBlank { null }?.replaceFirstChar { it.uppercase() },
                         nav.destination?.address?.ifBlank { null },
                     ).joinToString("\n")
                     primaryButton.text = "Navigovať"

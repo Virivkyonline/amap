@@ -1,5 +1,6 @@
 package online.virivky.amap.net
 
+import online.virivky.amap.data.RouteOptions
 import online.virivky.amap.geo.Geo
 import online.virivky.amap.geo.GeoPoint
 import online.virivky.amap.nav.LaneInfo
@@ -18,14 +19,27 @@ import kotlin.math.roundToInt
 object TomTom {
     private const val BASE = "https://api.tomtom.com/routing/1/calculateRoute/"
 
-    fun route(key: String, from: GeoPoint, to: GeoPoint, heading: Float?, via: GeoPoint? = null): Route {
+    fun route(key: String, from: GeoPoint, to: GeoPoint, heading: Float?, via: GeoPoint? = null): Route =
+        routes(key, from, to, heading, via).first()
+
+    /** Trasa a pri [alternatives] až dva ďalšie varianty. */
+    fun routes(
+        key: String,
+        from: GeoPoint,
+        to: GeoPoint,
+        heading: Float?,
+        via: GeoPoint? = null,
+        alternatives: Boolean = false,
+        options: RouteOptions = RouteOptions(),
+    ): List<Route> {
         val points = listOfNotNull(from, via, to)
+        val more = alternatives && via == null
         return try {
-            parse(JSONObject(Http.getString(url(key, points, heading, extended = true))))
+            parseAll(JSONObject(Http.getString(url(key, points, heading, extended = true, more, options))))
         } catch (e: HttpException) {
             // Staršie verzie API nepoznajú limity a pruhy – skúsime len premávku.
             if (e.code != 400) throw e
-            parse(JSONObject(Http.getString(url(key, points, heading, extended = false))))
+            parseAll(JSONObject(Http.getString(url(key, points, heading, extended = false, more, options))))
         }
     }
 
@@ -42,19 +56,36 @@ object TomTom {
         "Nepodarilo sa spojiť s TomTom. Skontrolujte internet."
     }
 
-    private fun url(key: String, points: List<GeoPoint>, heading: Float?, extended: Boolean): String {
+    private fun url(
+        key: String,
+        points: List<GeoPoint>,
+        heading: Float?,
+        extended: Boolean,
+        alternatives: Boolean = false,
+        options: RouteOptions = RouteOptions(),
+    ): String {
         val sb = StringBuilder(BASE)
             .append(points.joinToString(":") { "${it.lat},${it.lon}" })
             .append("/json?key=").append(URLEncoder.encode(key, "UTF-8"))
             .append("&traffic=true&travelMode=car&routeType=fastest&routeRepresentation=polyline")
             .append("&instructionsType=coded&computeTravelTimeFor=all&sectionType=traffic&sectionType=tunnel")
         if (extended) sb.append("&sectionType=speedLimit&sectionType=lanes")
+        if (alternatives) sb.append("&maxAlternatives=2")
+        if (options.avoidMotorways) sb.append("&avoid=motorways")
+        if (options.avoidTolls) sb.append("&avoid=tollRoads")
+        if (options.avoidFerries) sb.append("&avoid=ferries")
         if (heading != null) sb.append("&vehicleHeading=").append(((heading.roundToInt() % 360) + 360) % 360)
         return sb.toString()
     }
 
-    fun parse(json: JSONObject): Route {
-        val route = json.getJSONArray("routes").getJSONObject(0)
+    fun parse(json: JSONObject): Route = parseAll(json).first()
+
+    fun parseAll(json: JSONObject): List<Route> {
+        val routes = json.getJSONArray("routes")
+        return (0 until routes.length()).map { parseRoute(routes.getJSONObject(it)) }
+    }
+
+    private fun parseRoute(route: JSONObject): Route {
         val summary = route.getJSONObject("summary")
         val totalLength = summary.optDouble("lengthInMeters", 0.0)
         val totalTime = summary.optDouble("travelTimeInSeconds", 0.0)

@@ -48,6 +48,13 @@ object NavigationController {
         private set
     var route: Route? = null
         private set
+
+    /** Varianty trasy v náhľade (vybraná je [route]). */
+    var routes: List<Route> = emptyList()
+        private set
+
+    val selectedRouteIndex: Int
+        get() = routes.indexOf(route)
     var progress: Progress? = null
         private set
     var error: String? = null
@@ -151,12 +158,24 @@ object NavigationController {
         destination = place
         via = null
         route = null
+        routes = emptyList()
         progress = null
         error = null
         phase = Phase.ROUTING
         Recents.add(place)
         notifyChanged()
         computeRoute(reroute = false)
+    }
+
+    /** Výber iného variantu trasy v náhľade. */
+    fun selectRoute(index: Int) {
+        if (phase != Phase.PREVIEW) return
+        val chosen = routes.getOrNull(index) ?: return
+        if (chosen === route) return
+        route = chosen
+        clearRoadInfo()
+        loadRoadData(chosen)
+        notifyChanged()
     }
 
     /** Doplní názov a adresu cieľa (napr. po zistení adresy bodu z mapy). */
@@ -209,6 +228,7 @@ object NavigationController {
 
     fun start() {
         if (route == null) return
+        routes = emptyList()
         phase = Phase.NAVIGATING
         announced.clear()
         offRouteCount = 0
@@ -241,6 +261,7 @@ object NavigationController {
         destination = null
         via = null
         route = null
+        routes = emptyList()
         progress = null
         error = null
         rerouting = false
@@ -297,11 +318,15 @@ object NavigationController {
         val remainingBefore = progress?.remainingSeconds
         val heading = if (reroute) LocationTracker.heading else null
         val stop = via?.point
-        Bg.run({ Router.route(GeoPoint(here), target.point, heading, stop) }) { result ->
+        // V náhľade aj iné varianty trasy na výber.
+        val alternatives = phase != Phase.NAVIGATING && stop == null
+        Bg.run({ Router.routes(GeoPoint(here), target.point, heading, stop, alternatives) }) { result ->
             if (id != request) return@run
             rerouting = false
-            result.onSuccess { newRoute ->
+            result.onSuccess { found ->
+                val newRoute = found.first()
                 route = newRoute
+                routes = if (phase == Phase.NAVIGATING) emptyList() else found
                 error = null
                 clearRoadInfo()
                 loadRoadData(newRoute)

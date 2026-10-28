@@ -1,5 +1,6 @@
 package online.virivky.amap.net
 
+import online.virivky.amap.data.RouteOptions
 import online.virivky.amap.data.Settings
 import online.virivky.amap.geo.Geo
 import online.virivky.amap.geo.GeoPoint
@@ -23,37 +24,71 @@ object Router {
         private set
 
     /** Trasa z [from] do [to], prípadne cez zastávku [via]. */
-    fun route(from: GeoPoint, to: GeoPoint, heading: Float?, via: GeoPoint? = null): Route {
+    fun route(from: GeoPoint, to: GeoPoint, heading: Float?, via: GeoPoint? = null): Route =
+        routes(from, to, heading, via).first()
+
+    /**
+     * Trasa a pri [alternatives] aj iné varianty (najlepšia je prvá). Rešpektuje nastavenia,
+     * čomu sa vyhnúť (diaľnice, spoplatnené úseky, trajekty).
+     */
+    fun routes(
+        from: GeoPoint,
+        to: GeoPoint,
+        heading: Float?,
+        via: GeoPoint? = null,
+        alternatives: Boolean = false,
+        options: RouteOptions = Settings.routeOptions,
+    ): List<Route> {
         val key = Settings.tomtomKey
         if (key != null) {
             try {
-                return TomTom.route(key, from, to, heading, via).also { lastTomTomError = null }
+                return TomTom.routes(key, from, to, heading, via, alternatives, options).also { lastTomTomError = null }
             } catch (e: Exception) {
                 lastTomTomError = if (e is HttpException && e.code == 403) "Kľúč TomTom nefunguje alebo je vyčerpaný denný limit."
                 else "TomTom nedostupný, použitá trasa bez premávky."
             }
         }
-        return osrm(from, to, heading, via)
+        return osrm(from, to, heading, via, alternatives, options)
     }
 
-    fun osrm(from: GeoPoint, to: GeoPoint, heading: Float?, via: GeoPoint? = null): Route {
+    fun osrm(
+        from: GeoPoint,
+        to: GeoPoint,
+        heading: Float?,
+        via: GeoPoint? = null,
+        alternatives: Boolean = false,
+        options: RouteOptions = RouteOptions(),
+    ): List<Route> {
         val points = listOfNotNull(from, via, to)
         val url = StringBuilder("https://router.project-osrm.org/route/v1/driving/")
             .append(points.joinToString(";") { "${it.lon},${it.lat}" })
-            .append("?overview=full&steps=true&geometries=polyline6&annotations=nodes&alternatives=false")
+            .append("?overview=full&steps=true&geometries=polyline6&annotations=nodes")
+            .append("&alternatives=").append(alternatives && via == null)
+        // Verejný server vie vylúčiť len jeden druh ciest naraz.
+        when {
+            options.avoidMotorways -> url.append("&exclude=motorway")
+            options.avoidTolls -> url.append("&exclude=toll")
+            options.avoidFerries -> url.append("&exclude=ferry")
+        }
         if (heading != null) {
             // Pri prepočte trasy počas jazdy nech trasa začína v smere jazdy.
             url.append("&bearings=").append(((heading.roundToInt() % 360) + 360) % 360).append(",60")
                 .append(";".repeat(points.size - 1))
         }
-        return parse(JSONObject(Http.getString(url.toString())))
+        return parseAll(JSONObject(Http.getString(url.toString())))
     }
 
-    fun parse(json: JSONObject): Route {
+    fun parse(json: JSONObject): Route = parseAll(json).first()
+
+    fun parseAll(json: JSONObject): List<Route> {
         if (json.optString("code") != "Ok") {
             throw IOException(json.optString("message", json.optString("code", "Chyba trasy")))
         }
-        val route = json.getJSONArray("routes").getJSONObject(0)
+        val routes = json.getJSONArray("routes")
+        return (0 until routes.length()).map { parseRoute(routes.getJSONObject(it)) }
+    }
+
+    private fun parseRoute(route: JSONObject): Route {
         val points = Polyline.decode(route.getString("geometry"), 6)
         if (points.size < 2) throw IOException("Prázdna trasa")
 
