@@ -17,6 +17,7 @@ import online.virivky.amap.location.LocationTracker
 import online.virivky.amap.nav.Instructions
 import online.virivky.amap.nav.NavigationController
 import online.virivky.amap.nav.NavigationController.Phase
+import online.virivky.amap.util.CarLog
 import online.virivky.amap.util.GeoUri
 import kotlin.math.max
 
@@ -33,6 +34,7 @@ class AmapSession : Session() {
         get() = carContext.getCarService(ScreenManager::class.java)
 
     override fun onCreateScreen(intent: Intent): Screen {
+        CarLog.add("Obrazovka v aute (API hostiteľa ${carContext.carAppApiLevel})")
         map = CarMapSurface(carContext)
         navigationManager.setNavigationManagerCallback(object : NavigationManagerCallback {
             // Napr. keď používateľ spustí navigáciu v inej aplikácii.

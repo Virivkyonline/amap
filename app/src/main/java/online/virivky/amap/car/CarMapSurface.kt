@@ -17,6 +17,7 @@ import online.virivky.amap.location.LocationTracker
 import online.virivky.amap.map.DriveHud
 import online.virivky.amap.map.NavMap
 import online.virivky.amap.nav.NavigationController
+import online.virivky.amap.util.CarLog
 import org.maplibre.android.maps.MapLibreMapOptions
 import org.maplibre.android.maps.MapView
 
@@ -89,6 +90,7 @@ class CarMapSurface(private val carContext: CarContext) : SurfaceCallback {
         val surface = surfaceContainer.surface ?: return
         width = surfaceContainer.width
         height = surfaceContainer.height
+        CarLog.add("Plocha pre mapu ${width}×${height}, ${surfaceContainer.dpi} dpi")
         if (width <= 0 || height <= 0) return
         val manager = carContext.getSystemService(DisplayManager::class.java) ?: return
         val virtual = manager.createVirtualDisplay(
@@ -114,6 +116,7 @@ class CarMapSurface(private val carContext: CarContext) : SurfaceCallback {
         try {
             screen.show()
         } catch (e: Exception) {
+            CarLog.error("zobrazenie mapy v aute", e)
             map.onDestroy()
             virtual.release()
             display = null
@@ -126,6 +129,7 @@ class CarMapSurface(private val carContext: CarContext) : SurfaceCallback {
         hud = overlay
         map.getMapAsync { maplibre ->
             if (mapView !== map) return@getMapAsync
+            CarLog.add("Mapa v aute pripravená")
             navMap = NavMap(context, maplibre, dark).also {
                 it.setViewport(effectiveArea(), width, height)
             }

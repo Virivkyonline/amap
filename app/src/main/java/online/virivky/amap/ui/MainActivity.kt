@@ -71,6 +71,7 @@ import online.virivky.amap.net.Geocoder
 import online.virivky.amap.net.Router
 import online.virivky.amap.net.TomTom
 import online.virivky.amap.util.Bg
+import online.virivky.amap.util.CarLog
 import online.virivky.amap.util.GeoUri
 import org.maplibre.android.maps.MapView
 import java.time.Instant
@@ -656,6 +657,56 @@ class MainActivity : Activity() {
             .show()
     }
 
+    /**
+     * Čo vie apka o Android Auto: verzie, odkiaľ je lech-map nainštalovaná, či systém vidí jej službu
+     * pre auto, a záznam pripojení a chýb z auta (na odfotenie a poslanie).
+     */
+    private fun showCarDiagnostics() {
+        val pm = packageManager
+        val info = buildList {
+            add("lech-map ${pm.getPackageInfo(packageName, 0).versionName}")
+            val installer = try {
+                if (Build.VERSION.SDK_INT >= 30) pm.getInstallSourceInfo(packageName).installingPackageName
+                else @Suppress("DEPRECATION") pm.getInstallerPackageName(packageName)
+            } catch (e: Exception) {
+                null
+            }
+            add("Nainštalované cez: ${installer ?: "neznáme"}")
+            val auto = try {
+                pm.getPackageInfo("com.google.android.projection.gearhead", 0).versionName
+            } catch (e: Exception) {
+                null
+            }
+            add("Android Auto: ${auto ?: "nenájdené"}")
+            val service = pm.queryIntentServices(
+                Intent("androidx.car.app.CarAppService").setPackage(packageName),
+                PackageManager.GET_RESOLVED_FILTER,
+            ).firstOrNull()
+            val categories = service?.filter?.categoriesIterator()?.asSequence()?.toList().orEmpty()
+            add("Služba pre auto: ${if (service == null) "NENÁJDENÁ" else "OK " + categories.joinToString { it.substringAfterLast('.') }}")
+            add("")
+            val log = CarLog.lines()
+            if (log.isEmpty()) add("Android Auto sa k lech-map zatiaľ nepripojilo.") else addAll(log)
+        }.joinToString("\n")
+        val text = TextView(this).apply {
+            this.text = info
+            textSize = 13f
+            setTextIsSelectable(true)
+            val pad = (20 * resources.displayMetrics.density).toInt()
+            setPadding(pad, pad / 2, pad, 0)
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Android Auto – diagnostika")
+            .setView(android.widget.ScrollView(this).apply { addView(text) })
+            .setPositiveButton("Zdieľať") { _, _ ->
+                val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, info)
+                startActivity(Intent.createChooser(send, "Zdieľať diagnostiku"))
+            }
+            .setNeutralButton("Vymazať") { _, _ -> CarLog.clear() }
+            .setNegativeButton("Zavrieť", null)
+            .show()
+    }
+
     /** Moje miesta: uloženie miesta, kde som (napr. v lese), a zoznam uložených od najbližšieho. */
     private fun showSavedPlaces() {
         val here = here()
@@ -1107,6 +1158,13 @@ class MainActivity : Activity() {
                 isChecked = Settings.speedTolerance == value
             })
         }
+        val carDiagnostics = TextView(this).apply {
+            text = "Android Auto – diagnostika"
+            textSize = 15f
+            setTextColor(getColor(R.color.amap_blue))
+            setPadding(0, padding / 2, 0, padding / 4)
+            setOnClickListener { showCarDiagnostics() }
+        }
         val status = TextView(this).apply {
             text = Router.lastTomTomError.orEmpty()
             setTextColor(getColor(R.color.amap_red))
@@ -1127,6 +1185,7 @@ class MainActivity : Activity() {
             addView(warnSpeed)
             addView(toleranceLabel)
             addView(tolerance)
+            addView(carDiagnostics)
             addView(status)
         }
         AlertDialog.Builder(this)
