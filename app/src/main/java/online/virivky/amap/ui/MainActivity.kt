@@ -898,7 +898,7 @@ class MainActivity : Activity() {
         updateViewport()
     }
 
-    /** Nastavenia: kľúč TomTom pre živú premávku. */
+    /** Nastavenia: kľúč TomTom, farby mapy, auto na mape, hlasové upozornenia. */
     private fun showSettings() {
         val padding = (20 * resources.displayMetrics.density).toInt()
         val info = TextView(this).apply {
@@ -932,6 +932,12 @@ class MainActivity : Activity() {
                 isChecked = Settings.mapTheme == theme
             })
         }
+        val vehicleLabel = TextView(this).apply {
+            text = "Auto na mape"
+            textSize = 15f
+            setPadding(0, padding / 2, 0, 0)
+        }
+        val vehicle = VehiclePicker(this)
         val warningsLabel = TextView(this).apply {
             text = "Hlasové upozornenia"
             textSize = 15f
@@ -975,6 +981,8 @@ class MainActivity : Activity() {
             addView(showTraffic)
             addView(themeLabel)
             addView(themes)
+            addView(vehicleLabel)
+            addView(vehicle.view)
             addView(warningsLabel)
             addView(warnCameras)
             addView(warnIncidents)
@@ -989,6 +997,8 @@ class MainActivity : Activity() {
             .setPositiveButton("Uložiť") { _, _ ->
                 val key = keyInput.text.toString().trim()
                 MapTheme.entries.getOrNull(themes.checkedRadioButtonId - 1000)?.let { Settings.mapTheme = it }
+                Settings.vehicleModel = vehicle.model
+                Settings.vehicleColor = vehicle.color
                 Settings.warnCameras = warnCameras.isChecked
                 Settings.warnIncidents = warnIncidents.isChecked
                 Settings.warnSpeed = warnSpeed.isChecked

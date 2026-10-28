@@ -63,6 +63,21 @@ object Settings {
             listeners.forEach { it() }
         }
 
+    /** Ikona polohy na mape: tvar a farba. */
+    var vehicleModel: VehicleModel
+        get() = VehicleModel.entries.firstOrNull { it.name == prefs.getString("vehicle_model", null) } ?: VehicleModel.SEDAN
+        set(value) {
+            prefs.edit().putString("vehicle_model", value.name).apply()
+            listeners.forEach { it() }
+        }
+
+    var vehicleColor: VehicleColor
+        get() = VehicleColor.entries.firstOrNull { it.name == prefs.getString("vehicle_color", null) } ?: VehicleColor.WHITE
+        set(value) {
+            prefs.edit().putString("vehicle_color", value.name).apply()
+            listeners.forEach { it() }
+        }
+
     /** Čomu sa vyhýbať pri výpočte trasy. */
     var routeOptions: RouteOptions
         get() = RouteOptions(

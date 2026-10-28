@@ -79,6 +79,7 @@ class NavMap(
     private var shownLanes = ""
     private var shownSelected: Route? = null
     private var trafficKey = Settings.trafficLayerKey
+    private var vehicle = Settings.vehicleModel to Settings.vehicleColor
 
     /** Plynutie trasy: posun prerušovanej čiary po krokoch (ako pohyblivá trasa v AMap). */
     private var flowStep = 0
@@ -113,6 +114,12 @@ class NavMap(
         }
     }
     private val settingsListener: () -> Unit = {
+        // Iné auto na mape: stačí vymeniť obrázok.
+        val wantedVehicle = Settings.vehicleModel to Settings.vehicleColor
+        if (wantedVehicle != vehicle) {
+            vehicle = wantedVehicle
+            style?.addImage("car", MapIcons.vehicle(context))
+        }
         val key = Settings.trafficLayerKey
         val themeChanged = updateTheme(force = true)
         if (key != trafficKey || themeChanged) {
@@ -160,6 +167,7 @@ class NavMap(
     private fun loadStyle() {
         style = null
         val builder = Style.Builder().fromJson(MapStyle.json(dark, trafficKey))
+        vehicle = Settings.vehicleModel to Settings.vehicleColor
         MapIcons.all(context).forEach { (name, bitmap) -> builder.withImage(name, bitmap) }
         map.setStyle(builder) { loaded ->
             style = loaded

@@ -4,7 +4,6 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
-import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RadialGradient
@@ -12,6 +11,9 @@ import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.Typeface
 import online.virivky.amap.data.PoiCategory
+import online.virivky.amap.data.Settings
+import online.virivky.amap.data.VehicleColor
+import online.virivky.amap.data.VehicleModel
 
 /** Obrázky pre mapu (kreslené v kóde, veľkosti v dp). */
 object MapIcons {
@@ -19,20 +21,11 @@ object MapIcons {
     private const val ARROW_BLUE = 0xFF1F6FFF.toInt()
 
     fun all(context: Context): Map<String, Bitmap> {
-        val d = context.resources.displayMetrics
-        val density = d.density
-        fun canvas(wDp: Float, hDp: Float, draw: Canvas.(Float, Float) -> Unit): Bitmap {
-            val bitmap = Bitmap.createBitmap((wDp * density).toInt(), (hDp * density).toInt(), Bitmap.Config.ARGB_8888)
-            bitmap.density = d.densityDpi
-            val c = Canvas(bitmap)
-            c.scale(density, density)
-            c.draw(wDp, hDp)
-            return bitmap
-        }
+        fun canvas(wDp: Float, hDp: Float, draw: Canvas.(Float, Float) -> Unit) = bitmap(context, wDp, hDp, draw)
         return mapOf(
             "chevron" to canvas(14f, 14f) { w, h -> chevron(this, w, h) },
             "arrowhead" to canvas(48f, 48f) { w, h -> arrowhead(this, w, h) },
-            "car" to canvas(90f, 90f) { w, h -> car(this, w, h) },
+            "car" to vehicle(context),
             "dot" to canvas(28f, 28f) { w, h -> dot(this, w, h) },
             "compass" to canvas(130f, 130f) { w, h -> compass(this, w, h) },
             "pin" to canvas(34f, 44f) { w, h -> pin(this, w, h, 0xFFE5333A.toInt()) },
@@ -46,6 +39,25 @@ object MapIcons {
         } + LaneMarks.arrows.mapValues { (_, angle) ->
             canvas(24f, 56f) { w, h -> LaneMarks.arrow(this, angle, w, h) }
         } + mapOf("lane-x" to canvas(24f, 24f) { w, h -> LaneMarks.cross(this, w, h) })
+    }
+
+    /** Ikona polohy podľa nastavení (auto, motorka či šípka v zvolenej farbe). */
+    fun vehicle(context: Context): Bitmap = bitmap(context, 90f, 90f) { w, h ->
+        Vehicles.draw(this, Settings.vehicleModel, Settings.vehicleColor.argb, w, h)
+    }
+
+    /** Náhľad vozidla pre výber v nastaveniach (bez svetla pred ním). */
+    fun vehiclePreview(context: Context, model: VehicleModel, color: VehicleColor): Bitmap =
+        bitmap(context, 56f, 56f) { w, h -> Vehicles.draw(this, model, color.argb, w, h, beam = false) }
+
+    private fun bitmap(context: Context, wDp: Float, hDp: Float, draw: Canvas.(Float, Float) -> Unit): Bitmap {
+        val d = context.resources.displayMetrics
+        val bitmap = Bitmap.createBitmap((wDp * d.density).toInt(), (hDp * d.density).toInt(), Bitmap.Config.ARGB_8888)
+        bitmap.density = d.densityDpi
+        val c = Canvas(bitmap)
+        c.scale(d.density, d.density)
+        c.draw(wDp, hDp)
+        return bitmap
     }
 
     /** Šípka „>“ – pri umiestnení na čiare ukazuje v smere trasy. */
@@ -80,52 +92,6 @@ object MapIcons {
         }
         c.drawPath(path, fill)
         c.drawPath(path, stroke)
-    }
-
-    /** Biele auto zhora so svetlom pred sebou (smeruje hore). */
-    private fun car(c: Canvas, w: Float, h: Float) {
-        val cx = w / 2
-        val cy = h / 2
-        // Svetelný kužeľ pred autom.
-        val beam = Path()
-        beam.moveTo(cx - 9f, cy - 14f)
-        beam.lineTo(cx - 20f, 2f)
-        beam.lineTo(cx + 20f, 2f)
-        beam.lineTo(cx + 9f, cy - 14f)
-        beam.close()
-        val beamPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            shader = LinearGradient(0f, cy - 14f, 0f, 2f, Color.argb(0xAA, 0xFF, 0xFF, 0xFF), Color.TRANSPARENT, Shader.TileMode.CLAMP)
-        }
-        c.drawPath(beam, beamPaint)
-
-        // Tieň a karoséria.
-        val shadow = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            shader = RadialGradient(cx, cy + 2f, 24f, Color.argb(0x66, 0, 0, 0), Color.TRANSPARENT, Shader.TileMode.CLAMP)
-        }
-        c.drawCircle(cx, cy + 2f, 24f, shadow)
-        val body = RectF(cx - 11f, cy - 21f, cx + 11f, cy + 21f)
-        val bodyPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            shader = LinearGradient(body.left, 0f, body.right, 0f,
-                intArrayOf(0xFFD9DDE3.toInt(), Color.WHITE, 0xFFD9DDE3.toInt()), null, Shader.TileMode.CLAMP)
-        }
-        c.drawRoundRect(body, 9f, 9f, bodyPaint)
-        val dark = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF1D2433.toInt() }
-        // Predné sklo, strecha, zadné sklo.
-        val windshield = Path()
-        windshield.moveTo(cx - 9f, cy - 8f)
-        windshield.quadTo(cx, cy - 13f, cx + 9f, cy - 8f)
-        windshield.lineTo(cx + 7.5f, cy - 1f)
-        windshield.lineTo(cx - 7.5f, cy - 1f)
-        windshield.close()
-        c.drawPath(windshield, dark)
-        c.drawRoundRect(RectF(cx - 7f, cy + 9f, cx + 7f, cy + 14f), 2f, 2f, dark)
-        // Spätné zrkadlá a svetlá.
-        val white = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFE9ECF0.toInt() }
-        c.drawOval(RectF(cx - 15f, cy - 7f, cx - 10f, cy - 3f), white)
-        c.drawOval(RectF(cx + 10f, cy - 7f, cx + 15f, cy - 3f), white)
-        val red = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFE5333A.toInt() }
-        c.drawRoundRect(RectF(cx - 9f, cy + 18f, cx - 4f, cy + 20.5f), 1f, 1f, red)
-        c.drawRoundRect(RectF(cx + 4f, cy + 18f, cx + 9f, cy + 20.5f), 1f, 1f, red)
     }
 
     /** Modrá bodka pre polohu bez známeho smeru. */

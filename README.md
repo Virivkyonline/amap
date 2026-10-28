@@ -16,6 +16,8 @@ Vlastná navigácia **lech-map** pre Android, ktorá funguje aj v **Android Auto
   alebo na sivú trasu na mape; **možnosti trasy**: bez diaľnic, bez spoplatnených úsekov
   (diaľničná známka), bez trajektov
 - slovenské hlasové pokyny, automatický prepočet trasy pri zídení z cesty
+- **auto na mape podľa výberu** (Nastavenia → Auto na mape): sedan, SUV, športové auto, motorka
+  alebo šípka vo farbe biela, Kawasaki zelená, čierna, strieborná, červená či modrá – v mobile aj v aute
 - pohľad počas jazdy: **3D**, **2D v smere jazdy** alebo **2D sever hore** (tlačidlo 3D/2D/S);
   farby mapy **automaticky podľa slnka** (v aute podľa auta), stále denné alebo nočné
 - jazdné pruhy pred odbočkou (ktorým pruhom ísť) a **pohľad na pruhy na mape**: pred odbočkou sa mapa
