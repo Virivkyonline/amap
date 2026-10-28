@@ -6,7 +6,7 @@ Vlastná navigácia pre Android, ktorá funguje aj v **Android Auto**.
   pri jazde tmavý asfalt so svetlými okrajmi, zelená trasa so šípkami, auto s kompasom, 3D budovy
 - čierny panel s odbočkou a pruhmi, rýchlosť v kruhu, limit pri názve ulice,
   spodná lišta s časom, km, počtom semaforov a časom príchodu
-- vyhľadanie adresy alebo miesta s kritériami: **v okolí 50 km / Slovensko / všade**,
+- vyhľadanie adresy alebo miesta (aj **hlasom** – mikrofón pri vyhľadávaní) s kritériami: **v okolí 50 km / Slovensko / všade**,
   zoradenie **najbližšie / najlepšia zhoda**, **otvorené teraz** (otváracie hodiny);
   s kľúčom TomTom aj návrhy počas písania
 - **Domov a Práca** (uložíš hviezdičkou v náhľade trasy alebo podržaním výsledku),

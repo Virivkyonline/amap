@@ -50,6 +50,15 @@
                 android:textSize="17sp" />
 
             <ImageButton
+                android:id="@+id/voice_button"
+                android:layout_width="@dimen/button"
+                android:layout_height="@dimen/button"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Hľadať hlasom"
+                android:src="@drawable/ic_mic"
+                android:tint="@color/amap_blue" />
+
+            <ImageButton
                 android:id="@+id/search_button"
                 android:layout_width="@dimen/button"
                 android:layout_height="@dimen/button"

@@ -14,6 +14,7 @@ import android.graphics.drawable.GradientDrawable
 import android.location.Location
 import android.os.Build
 import android.os.Bundle
+import android.speech.RecognizerIntent
 import android.text.Editable
 import android.text.TextWatcher
 import android.text.SpannableString
@@ -270,6 +271,7 @@ class MainActivity : Activity() {
             override fun onTextChanged(text: CharSequence?, start: Int, before: Int, count: Int) {}
         })
         findViewById<View>(R.id.search_button).setOnClickListener { search() }
+        findViewById<View>(R.id.voice_button).setOnClickListener { voiceSearch() }
         findViewById<View>(R.id.settings_button).setOnClickListener { showSettings() }
         zoomIn.setOnClickListener { navMap?.zoomIn() }
         zoomOut.setOnClickListener { navMap?.zoomOut() }
@@ -393,6 +395,31 @@ class MainActivity : Activity() {
     }
 
     private fun here(): GeoPoint? = LocationTracker.last?.let { GeoPoint(it) }
+
+    /** Cieľ hlasom: rozpoznanie reči v telefóne (slovenčina). */
+    private fun voiceSearch() {
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+            .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            .putExtra(RecognizerIntent.EXTRA_LANGUAGE, "sk-SK")
+            .putExtra(RecognizerIntent.EXTRA_PROMPT, "Kam idete?")
+        try {
+            @Suppress("DEPRECATION")
+            startActivityForResult(intent, VOICE_REQUEST)
+        } catch (e: Exception) {
+            Toast.makeText(this, "Rozpoznávanie reči nie je v telefóne dostupné", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        @Suppress("DEPRECATION")
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != VOICE_REQUEST || resultCode != RESULT_OK) return
+        val text = data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull() ?: return
+        searchInput.setText(text)
+        searchInput.setSelection(text.length)
+        search()
+    }
 
     private fun search() {
         val text = searchInput.text.toString().trim()
@@ -978,5 +1005,9 @@ class MainActivity : Activity() {
         navLights.text = lights.toString()
         val arrival = LocalTime.now().plusSeconds(p.remainingSeconds.toLong()).format(DateTimeFormatter.ofPattern("HH:mm"))
         navArrival.text = "$arrival Príchod"
+    }
+
+    private companion object {
+        const val VOICE_REQUEST = 7
     }
 }
