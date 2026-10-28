@@ -280,7 +280,15 @@ class NavMap(private val context: Context, val map: MapLibreMap, dark: Boolean) 
             // Vo vyššej rýchlosti viac oddialiť a nakloniť, aby bolo vidieť ďalej dopredu.
             val speed = (NavigationController.speedKmh ?: 0).toDouble()
             if (android.os.SystemClock.elapsedRealtime() - userZoomAt > 20_000) {
-                navZoom = (17.3 - (speed - 40).coerceAtLeast(0.0) / 55).coerceIn(15.6, 17.3)
+                var zoom = (17.3 - (speed - 40).coerceAtLeast(0.0) / 55).coerceIn(15.6, 17.3)
+                // Pred odbočkou či zjazdom postupne priblížiť, aby bola križovatka dobre vidieť.
+                val p = NavigationController.progress
+                val step = if (p != null && route != null) route.steps[p.nextStepIndex] else null
+                if (p != null && step != null && step.type != "arrive" && step.modifier != "straight") {
+                    val k = ((700 - p.distanceToNextStep) / 600).coerceIn(0.0, 1.0)
+                    zoom += (17.8 - zoom).coerceAtLeast(0.0) * k
+                }
+                navZoom = zoom
             }
             val tilt = (40 + (speed - 30).coerceAtLeast(0.0) * 0.3).coerceIn(40.0, 58.0)
             // Auto v dolnej časti voľnej plochy, mapa otočená v smere jazdy.

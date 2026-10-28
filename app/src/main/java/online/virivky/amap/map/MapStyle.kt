@@ -234,6 +234,14 @@ object MapStyle {
                 "paint":{"line-color":"#e5333a","line-width":1.3,"line-opacity":0.85}}"""
             )
 
+            // Cesta, po ktorej vedie trasa, zvýraznená tyrkysovou (ako v AMap).
+            add(
+                """{"id":"route-corridor","type":"line","source":"route","minzoom":12,
+                "layout":{"line-cap":"round","line-join":"round"},
+                "paint":{"line-color":"${if (dark) "#2b5654" else "#cde8e1"}","line-opacity":0.8,
+                  "line-width":${linear(12 to 5, 14 to 11, 16 to 18, 17 to 25, 18 to 36)}}}"""
+            )
+
             // Trasa so svetlým žiarom pri aute a bielymi šípkami v smere jazdy.
             add(
                 """{"id":"route-casing","type":"line","source":"route",
