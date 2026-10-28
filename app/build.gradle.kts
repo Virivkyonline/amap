@@ -14,12 +14,13 @@ val versionMinutes = ((System.currentTimeMillis() / 1000 - 1_767_225_600L) / 60)
 
 android {
     namespace = "online.virivky.amap"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "online.virivky.amap"
         minSdk = 26
-        targetSdk = 35
+        // Google Play vyžaduje pre nové aplikácie aspoň API 36.
+        targetSdk = 36
         versionCode = versionMinutes
         versionName = "1.0.$buildNumber"
 

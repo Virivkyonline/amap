@@ -30,8 +30,10 @@
             android:name="androidx.car.app.minCarApiLevel"
             android:value="1" />
 
+        <!-- Späť obsluhuje onBackPressed(); s API 36 by ho Android 16 bez tohto nastavenia nevolal. -->
         <activity
             android:name=".ui.MainActivity"
+            android:enableOnBackInvokedCallback="false"
             android:exported="true"
             android:launchMode="singleTask"
             android:windowSoftInputMode="adjustResize">
