@@ -65,6 +65,25 @@ object NavigationController {
     var cameraDistance: Double? = null
         private set
 
+    /** Najbližší tunel pred nami (do 1 km) a vzdialenosť k nemu. */
+    var tunnelAhead: Tunnel? = null
+        private set
+    var tunnelDistance: Double? = null
+        private set
+
+    /** Poloha sa odhaduje bez GPS (napr. v tuneli). */
+    var estimating = false
+        private set
+
+    private var lastFixAt = 0L
+    private var lastSpeed = 0.0
+    private val ticker = object : Runnable {
+        override fun run() {
+            estimateWithoutGps()
+            if (phase == Phase.NAVIGATING) Bg.main.postDelayed(this, 1000)
+        }
+    }
+
     /** Názov cesty, po ktorej práve ideme. */
     val currentRoad: String?
         get() {
@@ -157,6 +176,9 @@ object NavigationController {
         offRouteCount = 0
         progress = null
         NavigationService.start(app)
+        lastFixAt = SystemClock.elapsedRealtime()
+        Bg.main.removeCallbacks(ticker)
+        Bg.main.postDelayed(ticker, 1000)
         LocationTracker.last?.let { updateProgress(it) }
         val p = progress
         val step = p?.let { route?.steps?.getOrNull(it.nextStepIndex) }
@@ -183,6 +205,8 @@ object NavigationController {
         progress = null
         error = null
         rerouting = false
+        estimating = false
+        Bg.main.removeCallbacks(ticker)
         clearRoadInfo()
         voice.stop()
         NavigationService.stop(app)
@@ -194,6 +218,8 @@ object NavigationController {
         speedKmh = null
         cameraAhead = null
         cameraDistance = null
+        tunnelAhead = null
+        tunnelDistance = null
     }
 
     /** Na pozadí dotiahne limity a radary pre novú trasu. */
@@ -205,9 +231,9 @@ object NavigationController {
             data.speedLimits?.let { r.speedLimits = it }
             r.cameras = data.cameras
             r.trafficSignals = data.trafficSignals
-            val location = LocationTracker.last
+            data.tunnels?.let { r.tunnels = it }
             val p = progress
-            if (phase == Phase.NAVIGATING && location != null && p != null) updateRoadInfo(r, p, location)
+            if (phase == Phase.NAVIGATING && p != null) updateRoadInfo(r, p, LocationTracker.last?.let { speedOf(it) })
             notifyChanged()
         }
     }
@@ -260,6 +286,9 @@ object NavigationController {
 
     private fun onLocation(location: Location) {
         if (phase != Phase.NAVIGATING) return
+        lastFixAt = SystemClock.elapsedRealtime()
+        speedOf(location)?.let { lastSpeed = it }
+        estimating = false
         updateProgress(location)
         // So živou premávkou každých 5 minút overíme, či nie je rýchlejšia trasa.
         if (phase == Phase.NAVIGATING && Settings.tomtomKey != null && !rerouting &&
@@ -294,20 +323,54 @@ object NavigationController {
             return
         }
         // Najprv pokyn na odbočenie, upozornenia na radar a rýchlosť sa zaradia za neho.
-        if (!rerouting) announce(r, p, location)
-        updateRoadInfo(r, p, location)
+        val speed = speedOf(location)
+        if (!rerouting) announce(r, p, speed ?: 0.0)
+        updateRoadInfo(r, p, speed)
     }
 
-    private fun updateRoadInfo(r: Route, p: Progress, location: Location) {
-        speedKmh = if (location.hasSpeed()) (location.speed * 3.6f).roundToInt() else null
+    private fun speedOf(location: Location): Double? =
+        if (location.hasSpeed()) location.speed.toDouble() else null
+
+    /**
+     * Bez GPS (tunel) sa auto posúva po trase poslednou známou rýchlosťou,
+     * kým sa signál nevráti (najviac 3 minúty).
+     */
+    private fun estimateWithoutGps() {
+        if (phase != Phase.NAVIGATING || rerouting) return
+        val r = route ?: return
+        val p = progress ?: return
+        val age = SystemClock.elapsedRealtime() - lastFixAt
+        if (age < 2500 || age > 180_000 || lastSpeed < 5) return
+        val next = r.progressAt(p.traveled + lastSpeed)
+        if (next.remainingDistance < 25) return
+        progress = next
+        estimating = true
+        announce(r, next, lastSpeed)
+        updateRoadInfo(r, next, lastSpeed)
+        notifyChanged()
+    }
+
+    private fun updateRoadInfo(r: Route, p: Progress, speedMps: Double?) {
+        speedKmh = speedMps?.let { (it * 3.6).roundToInt() }
         speedLimit = r.speedLimits?.getOrNull(p.segmentIndex)?.takeIf { it > 0 }
+
+        // Tunel pred nami, ak je bližšie ako ďalší manéver.
+        val tunnel = r.tunnels.firstOrNull { it.endAlong > p.traveled }
+        val toTunnel = tunnel?.let { it.startAlong - p.traveled }
+        if (tunnel != null && toTunnel != null && toTunnel in 0.0..1000.0 && toTunnel < p.distanceToNextStep) {
+            tunnelAhead = tunnel
+            tunnelDistance = toTunnel
+        } else {
+            tunnelAhead = null
+            tunnelDistance = null
+        }
 
         val camera = r.cameras.firstOrNull { it.along > p.traveled - 5 }
         val distance = camera?.let { it.along - p.traveled }
         if (camera != null && distance != null && distance < 1500) {
             cameraAhead = camera
             cameraDistance = max(0.0, distance)
-            val speed = if (location.hasSpeed()) location.speed.toDouble() else 0.0
+            val speed = speedMps ?: 0.0
             if (distance < max(300.0, speed * 20) && announced.add("camera-${(camera.point.lat * 1e5).roundToInt()},${(camera.point.lon * 1e5).roundToInt()}")) {
                 speak("Pozor, radar" + (camera.limit?.let { ", rýchlosť $it." } ?: "."), interrupt = false)
             }
@@ -323,9 +386,9 @@ object NavigationController {
         }
     }
 
-    private fun announce(r: Route, p: Progress, location: Location) {
+    private fun announce(r: Route, p: Progress, speedMps: Double) {
         val step = r.steps[p.nextStepIndex]
-        val speed = max(if (location.hasSpeed()) location.speed.toDouble() else 0.0, 8.0)
+        val speed = max(speedMps, 8.0)
         val far = (speed * 25).coerceIn(250.0, 1500.0)
         val near = (speed * 7).coerceIn(40.0, 200.0)
         val d = p.distanceToNextStep

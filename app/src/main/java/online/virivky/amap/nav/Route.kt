@@ -8,6 +8,9 @@ import kotlin.math.min
 /** Jazdný pruh pred manévrom: šípky na ceste a či je pruh vhodný pre trasu. */
 class LaneInfo(val indications: List<String>, val valid: Boolean)
 
+/** Tunel na trase (vzdialenosti od začiatku trasy). */
+class Tunnel(val startAlong: Double, val endAlong: Double, val name: String)
+
 /** Radar na trase: poloha, vzdialenosť od začiatku trasy a prípadný limit. */
 class Camera(val point: GeoPoint, val along: Double, val limit: Int?)
 
@@ -75,6 +78,10 @@ class Route(
     /** Vzdialenosti semaforov od začiatku trasy. Dopĺňajú sa dodatočne. */
     @Volatile
     var trafficSignals: DoubleArray = DoubleArray(0)
+
+    /** Tunely na trase. Dopĺňajú sa dodatočne (OSM) alebo hneď (TomTom). */
+    @Volatile
+    var tunnels: List<Tunnel> = emptyList()
 
     /** Úroveň premávky pre každý úsek trasy (0 = plynulo alebo neznáme). */
     val segmentTraffic: IntArray by lazy {
@@ -163,7 +170,24 @@ class Route(
         }
         scan(max(0, hint - 10), min(last, hint + 400))
         if (best > 60) scan(0, last)
+        return progress(bestSeg, bestT, best)
+    }
 
+    /** Poloha vo vzdialenosti [along] od začiatku trasy (napr. v tuneli bez GPS). */
+    fun progressAt(along: Double): Progress {
+        if (points.size < 2) return locate(points.firstOrNull() ?: GeoPoint(0.0, 0.0), 0)
+        val target = along.coerceIn(0.0, distance)
+        var lo = 0
+        var hi = points.size - 1
+        while (hi - lo > 1) {
+            val mid = (lo + hi) / 2
+            if (cumulative[mid] <= target) lo = mid else hi = mid
+        }
+        val len = cumulative[lo + 1] - cumulative[lo]
+        return progress(lo, if (len > 0) ((target - cumulative[lo]) / len).coerceIn(0.0, 1.0) else 0.0, 0.0)
+    }
+
+    private fun progress(bestSeg: Int, bestT: Double, offRoute: Double): Progress {
         val a = points[bestSeg]
         val b = points[bestSeg + 1]
         val traveled = cumulative[bestSeg] + (cumulative[bestSeg + 1] - cumulative[bestSeg]) * bestT
@@ -183,7 +207,7 @@ class Route(
             segmentIndex = bestSeg,
             snapped = Geo.interpolate(a, b, bestT),
             segmentBearing = segBearing,
-            offRouteDistance = best,
+            offRouteDistance = offRoute,
             traveled = traveled,
             nextStepIndex = next,
             distanceToNextStep = toNext,

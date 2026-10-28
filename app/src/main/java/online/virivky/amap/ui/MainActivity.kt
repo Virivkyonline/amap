@@ -472,6 +472,7 @@ class MainActivity : Activity() {
         val p = nav.progress
         lanesImage.visibility = View.GONE
         maneuverBadge.visibility = View.GONE
+        maneuverText.visibility = View.VISIBLE
         maneuverIcon.background = null
         if (nav.phase == Phase.ARRIVED) {
             maneuverIcon.setImageResource(R.drawable.ic_place)
@@ -485,6 +486,21 @@ class MainActivity : Activity() {
             maneuverDistance.text = ""
             maneuverRoad.text = if (nav.rerouting) "Prepočítavam trasu…" else "Čakám na GPS…"
             maneuverText.text = ""
+            return
+        }
+        // Tunel pred nami (bližšie ako ďalší manéver) – ako v AMap.
+        val tunnel = nav.tunnelAhead
+        val toTunnel = nav.tunnelDistance
+        if (tunnel != null && toTunnel != null) {
+            maneuverIcon.setImageResource(R.drawable.ic_tunnel)
+            maneuverDistance.text = distanceText(toTunnel)
+            maneuverRoad.text = when {
+                tunnel.name.contains("tunel", ignoreCase = true) -> tunnel.name
+                tunnel.name.isNotBlank() -> "Tunel ${tunnel.name}"
+                else -> "Tunel"
+            }
+            maneuverText.text = if (nav.estimating) "Bez GPS – poloha sa odhaduje" else ""
+            maneuverText.visibility = if (nav.estimating) View.VISIBLE else View.GONE
             return
         }
         val step = route.steps[p.nextStepIndex]

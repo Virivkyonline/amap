@@ -3,6 +3,7 @@ package online.virivky.amap.net
 import online.virivky.amap.geo.GeoPoint
 import online.virivky.amap.nav.Camera
 import online.virivky.amap.nav.Route
+import online.virivky.amap.nav.Tunnel
 import org.json.JSONObject
 import java.io.IOException
 import java.net.URLEncoder
@@ -20,7 +21,13 @@ object RoadData {
     private const val CHUNK = 4000
 
     /** [speedLimits] je null, ak sa limity nezisťovali (trasa ich už má z TomTom). */
-    class Result(val speedLimits: IntArray?, val cameras: List<Camera>, val trafficSignals: DoubleArray)
+    class Result(
+        val speedLimits: IntArray?,
+        val cameras: List<Camera>,
+        val trafficSignals: DoubleArray,
+        /** null = tunely sa nezisťovali (trasa ich už má z TomTom). */
+        val tunnels: List<Tunnel>? = null,
+    )
 
     fun fetch(route: Route): Result? {
         val nodeIds = route.nodeIds ?: return fetchAround(route)
@@ -31,10 +38,13 @@ object RoadData {
         val limits = HashMap<Pair<Long, Long>, Int>()
         val cameraCandidates = ArrayList<Pair<GeoPoint, Int?>>()
         val signalIds = HashSet<Long>()
+        // (a, b) -> názov tunela, pre oba smery
+        val tunnelSegments = HashMap<Pair<Long, Long>, String>()
         for (chunk in unique.chunked(CHUNK)) {
             val query = "[out:json][timeout:60];" +
                 "node(id:${chunk.joinToString(",")})->.r;" +
                 "way(bn.r)[highway][~\"^maxspeed\"~\".\"];out body;" +
+                "way(bn.r)[highway][tunnel~\"^(yes|avalanche_protector)$\"];out body;" +
                 "node(around.r:40)[highway=speed_camera];out;" +
                 "node.r[highway=traffic_signals];out tags;"
             val elements = JSONObject(post(query)).optJSONArray("elements") ?: continue
@@ -44,6 +54,15 @@ object RoadData {
                 when (e.optString("type")) {
                     "way" -> {
                         val nodes = e.optJSONArray("nodes") ?: continue
+                        if (tags.optString("tunnel") in setOf("yes", "avalanche_protector")) {
+                            val name = tags.optString("tunnel:name").ifBlank { tags.optString("name") }
+                            for (k in 0 until nodes.length() - 1) {
+                                val a = nodes.getLong(k)
+                                val b = nodes.getLong(k + 1)
+                                tunnelSegments[a to b] = name
+                                tunnelSegments[b to a] = name
+                            }
+                        }
                         val both = parseMaxspeed(tags.optString("maxspeed"))
                         val forward = parseMaxspeed(tags.optString("maxspeed:forward")) ?: both
                         val backward = parseMaxspeed(tags.optString("maxspeed:backward")) ?: both
@@ -80,7 +99,25 @@ object RoadData {
             .distinct()
             .sorted()
             .toDoubleArray()
-        return Result(speedLimits, cameras, signals)
+        // Súvislé úseky trasy v tuneli (kratšie ako 80 m sú len podjazdy).
+        val tunnels = ArrayList<Tunnel>()
+        var start = -1
+        var name = ""
+        for (i in 0..nodeIds.size - 2) {
+            val tunnel = tunnelSegments[nodeIds[i] to nodeIds[i + 1]]
+            if (tunnel != null && start < 0) {
+                start = i
+                name = tunnel
+            }
+            if ((tunnel == null || i == nodeIds.size - 2) && start >= 0) {
+                val end = if (tunnel == null) i else i + 1
+                val from = route.alongAtIndex(start)
+                val to = route.alongAtIndex(end)
+                if (to - from >= 80) tunnels.add(Tunnel(from, to, name))
+                start = -1
+            }
+        }
+        return Result(speedLimits, cameras, signals, tunnels)
     }
 
     /**

@@ -6,6 +6,7 @@ import online.virivky.amap.nav.LaneInfo
 import online.virivky.amap.nav.Route
 import online.virivky.amap.nav.RouteStep
 import online.virivky.amap.nav.TrafficSpan
+import online.virivky.amap.nav.Tunnel
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
@@ -45,7 +46,7 @@ object TomTom {
             .append(to.lat).append(',').append(to.lon)
             .append("/json?key=").append(URLEncoder.encode(key, "UTF-8"))
             .append("&traffic=true&travelMode=car&routeType=fastest&routeRepresentation=polyline")
-            .append("&instructionsType=coded&computeTravelTimeFor=all&sectionType=traffic")
+            .append("&instructionsType=coded&computeTravelTimeFor=all&sectionType=traffic&sectionType=tunnel")
         if (extended) sb.append("&sectionType=speedLimit&sectionType=lanes")
         if (heading != null) sb.append("&vehicleHeading=").append(((heading.roundToInt() % 360) + 360) % 360)
         return sb.toString()
@@ -71,6 +72,7 @@ object TomTom {
 
         val laneSections = ArrayList<Pair<Int, List<LaneInfo>>>()
         val traffic = ArrayList<TrafficSpan>()
+        val tunnelSpans = ArrayList<Pair<Int, Int>>()
         var speedLimits: IntArray? = null
         val sections = route.optJSONArray("sections") ?: JSONArray()
         for (i in 0 until sections.length()) {
@@ -98,6 +100,7 @@ object TomTom {
                     }
                 }
                 "LANES" -> lanes(section)?.let { laneSections.add(end to it) }
+                "TUNNEL" -> tunnelSpans.add(start to end)
             }
         }
 
@@ -151,7 +154,11 @@ object TomTom {
             traffic = traffic,
             trafficDelay = summary.optDouble("trafficDelayInSeconds", 0.0),
             live = true,
-        ).also { r -> speedLimits?.let { r.speedLimits = it } }
+        ).also { r ->
+            speedLimits?.let { r.speedLimits = it }
+            r.tunnels = tunnelSpans.map { (start, end) -> Tunnel(r.alongAtIndex(start), r.alongAtIndex(end), "") }
+                .filter { it.endAlong - it.startAlong >= 80 }
+        }
     }
 
     /** Prevod manévru TomTom na typ a smer v štýle OSRM (pre spoločné texty a ikony). */

@@ -43,7 +43,7 @@ object MapStyle {
         residentialNear = "#283f42",
         park = "#1f3a3b",
         wood = "#1c3536",
-        water = "#14273f",
+        water = "#1d4a6e",
         building = "#262e42",
         path = "#2c3446",
         minor = "#3a4357",

@@ -227,7 +227,9 @@ class NavMap(private val context: Context, val map: MapLibreMap, dark: Boolean) 
         }
 
         // Moja poloha: počas navigácie auto s kompasom, inak bodka alebo auto podľa smeru.
-        val heading = LocationTracker.heading ?: snapped?.segmentBearing
+        // Bez GPS (tunel) sa smer berie z trasy, inak z GPS.
+        val heading = if (nav.estimating) snapped?.segmentBearing ?: LocationTracker.heading
+        else LocationTracker.heading ?: snapped?.segmentBearing
         val me = snapped?.snapped ?: location?.let { GeoPoint(it) }
         s.getSourceAs<GeoJsonSource>("destination-line")?.setGeoJson(
             if (navigating && me != null && destination != null) lineString(listOf(me, destination)) else EMPTY
