@@ -14,6 +14,9 @@ class Tunnel(val startAlong: Double, val endAlong: Double, val name: String)
 /** Radar na trase: poloha, vzdialenosť od začiatku trasy a prípadný limit. */
 class Camera(val point: GeoPoint, val along: Double, val limit: Int?)
 
+/** Úsekové meranie rýchlosti: začiatok a koniec (vzdialenosti od začiatku trasy) a limit. */
+class SpeedSection(val startAlong: Double, val endAlong: Double, val limit: Int?)
+
 /** Úsek trasy s premávkou medzi bodmi trasy: úroveň 1 = pomaly, 2 = zápcha, 3 = stojí/uzávierka. */
 class TrafficSpan(val startIndex: Int, val endIndex: Int, val level: Int)
 
@@ -78,6 +81,9 @@ class Route(
     /** Radary pozdĺž trasy zoradené podľa vzdialenosti. Dopĺňajú sa dodatočne. */
     @Volatile
     var cameras: List<Camera> = emptyList()
+
+    /** Úsekové merania rýchlosti na trase. */
+    var sections: List<SpeedSection> = emptyList()
 
     /** Vzdialenosti semaforov od začiatku trasy. Dopĺňajú sa dodatočne. */
     @Volatile

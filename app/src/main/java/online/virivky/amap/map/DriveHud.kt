@@ -15,6 +15,7 @@ import online.virivky.amap.nav.Instructions
 import online.virivky.amap.nav.NavigationController
 import online.virivky.amap.nav.NavigationController.Phase
 import online.virivky.amap.nav.Route
+import online.virivky.amap.nav.SpeedSection
 import online.virivky.amap.net.Incident
 import kotlin.math.roundToInt
 
@@ -64,7 +65,10 @@ class DriveHud @JvmOverloads constructor(context: Context, attrs: AttributeSet? 
         val incidentDistance = nav.incidentDistance
         if (navigating && incident != null && incidentDistance != null) {
             drawIncident(canvas, x, y, incident, incidentDistance)
+            y += 48 * dp
         }
+        val section = nav.speedSection
+        if (navigating && section != null) drawSection(canvas, x, y, section, nav.inSection, nav.sectionDistance, nav.sectionAverage)
 
         if (navigating) {
             drawProgress(canvas, area, nav.progressFraction, nav.route)
@@ -142,6 +146,30 @@ class DriveHud @JvmOverloads constructor(context: Context, attrs: AttributeSet? 
         text.color = Color.WHITE
         text.textAlign = Paint.Align.LEFT
         canvas.drawText(label, x + 40 * dp, y + h / 2 + 6 * dp, text)
+        text.textAlign = Paint.Align.CENTER
+    }
+
+    /** Úsekové meranie: pred ním vzdialenosť, v ňom priemerná rýchlosť (červeno nad limit). */
+    private fun drawSection(canvas: Canvas, x: Float, y: Float, section: SpeedSection, inside: Boolean, distance: Double?, average: Int?) {
+        val limit = section.limit
+        val label = when {
+            !inside -> "Úsekové meranie · " + (distance?.let { Instructions.displayDistance(it) } ?: "")
+            average != null -> "Úsek Ø $average km/h"
+            else -> "Úsekové meranie"
+        }
+        val over = inside && average != null && limit != null && average > limit + 2
+        text.typeface = bold
+        text.textSize = 17 * dp
+        val h = 40 * dp
+        val signW = if (limit != null) h - 6 * dp else 0f
+        val w = 26 * dp + signW + text.measureText(label)
+        rect.set(x, y, x + w, y + h)
+        fill.color = if (over) Color.rgb(0xE5, 0x33, 0x3A) else Color.argb(0xF2, 0x10, 0x17, 0x27)
+        canvas.drawRoundRect(rect, h / 2, h / 2, fill)
+        if (limit != null) drawLimit(canvas, x + 3 * dp + signW / 2, y + h / 2, signW / 2, limit)
+        text.color = Color.WHITE
+        text.textAlign = Paint.Align.LEFT
+        canvas.drawText(label, x + signW + 12 * dp, y + h / 2 + 6 * dp, text)
         text.textAlign = Paint.Align.CENTER
     }
 

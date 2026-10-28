@@ -60,7 +60,7 @@ object Pois {
             }
         }
         val pois = found ?: run {
-            val line = thin(route.slice(traveled, end), 400.0)
+            val line = Geo.thin(route.slice(traveled, end), 400.0)
             osm(category, "around:${MAX_OFFSET.toInt()}," + line.joinToString(",") { "${it.lat},${it.lon}" }, null)
         }
         return pois.mapNotNull { poi ->
@@ -70,15 +70,6 @@ object Pois {
             .distinctBy { "${it.name}|${(it.point.lat * 2000).roundToInt()}|${(it.point.lon * 2000).roundToInt()}" }
             .sortedBy { it.distance }
             .take(LIMIT)
-    }
-
-    /** Body trasy najviac každých [spacing] metrov (kratší dotaz pre Overpass). */
-    private fun thin(points: List<GeoPoint>, spacing: Double): List<GeoPoint> {
-        if (points.size <= 2) return points
-        val result = arrayListOf(points.first())
-        for (p in points) if (Geo.distance(result.last(), p) >= spacing) result.add(p)
-        if (result.last() != points.last()) result.add(points.last())
-        return result
     }
 
     private fun tomtom(key: String, category: PoiCategory, center: GeoPoint, radius: Int): List<Poi>? {

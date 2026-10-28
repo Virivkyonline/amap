@@ -58,6 +58,15 @@ object Geo {
         val py = ay + dy * t
         return SegmentHit(sqrt(px * px + py * py), t)
     }
+
+    /** Body čiary najviac každých [spacing] metrov (kratšie dotazy pre Overpass). */
+    fun thin(points: List<GeoPoint>, spacing: Double): List<GeoPoint> {
+        if (points.size <= 2) return points
+        val result = arrayListOf(points.first())
+        for (p in points) if (distance(result.last(), p) >= spacing) result.add(p)
+        if (result.last() != points.last()) result.add(points.last())
+        return result
+    }
 }
 
 /** Dekódovanie Google polyline formátu (OSRM používa presnosť 6). */

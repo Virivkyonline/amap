@@ -21,6 +21,8 @@ Vlastná navigácia pre Android, ktorá funguje aj v **Android Auto**.
 - jazdné pruhy pred odbočkou (ktorým pruhom ísť)
 - rýchlostný limit a aktuálna rýchlosť, pri prekročení červená a hlasové upozornenie
 - radary na mape s hlasovým upozornením
+- **úsekové merania rýchlosti** (podľa OpenStreetMap): upozornenie pred úsekom, v úseku
+  priemerná rýchlosť (červeno nad limit) a hlásenie konca
 - **živá premávka (TomTom)**: farby premávky na cestách, trasa zafarbená podľa zápch,
   výpočet trasy a času príchodu podľa premávky, každých 5 minút hľadanie rýchlejšej trasy
 - **dopravné udalosti (TomTom)**: nehody, uzávierky, práce na ceste, zápchy a nebezpečenstvá

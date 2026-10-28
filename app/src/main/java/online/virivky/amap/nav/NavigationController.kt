@@ -113,6 +113,21 @@ object NavigationController {
     var incidentDistance: Double? = null
         private set
 
+    /** Úsekové meranie: aktuálne (ak [inSection]) alebo najbližšie do 1 km. */
+    var speedSection: SpeedSection? = null
+        private set
+    var inSection = false
+        private set
+
+    /** Vzdialenosť k začiatku úseku (pred ním) a priemerná rýchlosť v úseku (v ňom). */
+    var sectionDistance: Double? = null
+        private set
+    var sectionAverage: Int? = null
+        private set
+    private var sectionEnteredAt = 0L
+    private var sectionEnteredAlong = 0.0
+    private var sectionWarningAt = 0L
+
     /** Poloha sa odhaduje bez GPS (napr. v tuneli). */
     var estimating = false
         private set
@@ -365,6 +380,10 @@ object NavigationController {
         tunnelDistance = null
         incidentAhead = null
         incidentDistance = null
+        speedSection = null
+        inSection = false
+        sectionDistance = null
+        sectionAverage = null
     }
 
     /** Na pozadí dotiahne limity a radary pre novú trasu. */
@@ -377,6 +396,7 @@ object NavigationController {
             r.cameras = data.cameras
             r.trafficSignals = data.trafficSignals
             data.tunnels?.let { r.tunnels = it }
+            r.sections = data.sections
             val p = progress
             if (phase == Phase.NAVIGATING && p != null) updateRoadInfo(r, p, LocationTracker.last?.let { speedOf(it) })
             notifyChanged()
@@ -537,6 +557,8 @@ object NavigationController {
             tunnelDistance = null
         }
 
+        updateSection(r, p, speedMps)
+
         // Nehoda, uzávierka či práce na ceste pred nami (TomTom).
         val incident = if (TrafficEvents.aheadRoute === r) TrafficEvents.ahead.firstOrNull { it.along > p.traveled - 30 } else null
         val toIncident = incident?.let { it.along - p.traveled }
@@ -570,6 +592,52 @@ object NavigationController {
         if (overSpeed && now - lastSpeedWarningAt > 60_000) {
             lastSpeedWarningAt = now
             speak("Prekračujete rýchlosť.", interrupt = false)
+        }
+    }
+
+    /** Úsekové meranie: upozornenie pred ním, priemerná rýchlosť v ňom, hlásenie konca. */
+    private fun updateSection(r: Route, p: Progress, speedMps: Double?) {
+        val now = SystemClock.elapsedRealtime()
+        val inside = r.sections.firstOrNull { p.traveled >= it.startAlong && p.traveled <= it.endAlong }
+        if (inside != null) {
+            if (!inSection || speedSection !== inside) {
+                sectionEnteredAt = now
+                sectionEnteredAlong = p.traveled
+                if (announced.add("section-in-${inside.startAlong.roundToInt()}")) {
+                    speak("Začína úsekové meranie rýchlosti" + (inside.limit?.let { ", limit $it." } ?: "."), interrupt = false)
+                }
+            }
+            speedSection = inside
+            inSection = true
+            sectionDistance = null
+            val seconds = (now - sectionEnteredAt) / 1000.0
+            val average = if (seconds >= 10) ((p.traveled - sectionEnteredAlong) / seconds * 3.6).roundToInt() else null
+            sectionAverage = average
+            val limit = inside.limit
+            if (average != null && limit != null && average > limit + 2 && now - sectionWarningAt > 60_000) {
+                sectionWarningAt = now
+                speak("Priemerná rýchlosť v úseku je $average, limit $limit.", interrupt = false)
+            }
+            return
+        }
+        if (inSection) {
+            speedSection?.let { if (announced.add("section-out-${it.startAlong.roundToInt()}")) speak("Koniec úsekového merania.", interrupt = false) }
+            inSection = false
+            sectionAverage = null
+        }
+        val next = r.sections.firstOrNull { it.startAlong > p.traveled }
+        val distance = next?.let { it.startAlong - p.traveled }
+        if (next != null && distance != null && distance < 1000) {
+            speedSection = next
+            sectionDistance = distance
+            if (distance < max(400.0, (speedMps ?: 0.0) * 20) && announced.add("section-${next.startAlong.roundToInt()}")) {
+                speak("Pozor, o ${Instructions.spokenDistance(distance)} začína úsekové meranie rýchlosti.", interrupt = false)
+                // Hlásenie začiatku už netreba opakovať.
+                announced.add("section-in-${next.startAlong.roundToInt()}")
+            }
+        } else {
+            speedSection = null
+            sectionDistance = null
         }
     }
 

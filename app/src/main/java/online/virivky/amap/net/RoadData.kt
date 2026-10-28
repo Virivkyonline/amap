@@ -1,12 +1,16 @@
 package online.virivky.amap.net
 
+import online.virivky.amap.geo.Geo
 import online.virivky.amap.geo.GeoPoint
 import online.virivky.amap.nav.Camera
 import online.virivky.amap.nav.Route
+import online.virivky.amap.nav.SpeedSection
 import online.virivky.amap.nav.Tunnel
 import org.json.JSONObject
 import java.io.IOException
 import java.net.URLEncoder
+import java.util.Locale
+import kotlin.math.min
 import kotlin.math.roundToInt
 
 /**
@@ -27,6 +31,7 @@ object RoadData {
         val trafficSignals: DoubleArray,
         /** null = tunely sa nezisťovali (trasa ich už má z TomTom). */
         val tunnels: List<Tunnel>? = null,
+        val sections: List<SpeedSection> = emptyList(),
     )
 
     fun fetch(route: Route): Result? {
@@ -117,7 +122,63 @@ object RoadData {
                 start = -1
             }
         }
-        return Result(speedLimits, cameras, signals, tunnels)
+        return Result(speedLimits, cameras, signals, tunnels, sectionsOrEmpty(route))
+    }
+
+    private fun sectionsOrEmpty(route: Route): List<SpeedSection> = try {
+        averageSpeedSections(route)
+    } catch (e: Exception) {
+        emptyList()
+    }
+
+    /**
+     * Úsekové merania rýchlosti (OSM relácie enforcement=average_speed) na prvých 200 km trasy.
+     * Začiatok a koniec sú body „from“ a „to“, inak krajné kamery („device“).
+     */
+    fun averageSpeedSections(route: Route): List<SpeedSection> {
+        val line = Geo.thin(route.slice(0.0, min(route.distance, 200_000.0)), 300.0)
+        if (line.size < 2) return emptyList()
+        val around = line.joinToString(",") { String.format(Locale.US, "%.5f,%.5f", it.lat, it.lon) }
+        val query = "[out:json][timeout:60];rel[type=enforcement][enforcement=average_speed](around:80,$around);" +
+            "out body;>;out skel qt;"
+        val elements = JSONObject(overpass(query)).optJSONArray("elements") ?: return emptyList()
+        val nodes = HashMap<Long, GeoPoint>()
+        val relations = ArrayList<JSONObject>()
+        for (i in 0 until elements.length()) {
+            val e = elements.getJSONObject(i)
+            when (e.optString("type")) {
+                "node" -> nodes[e.getLong("id")] = GeoPoint(e.getDouble("lat"), e.getDouble("lon"))
+                "relation" -> relations.add(e)
+            }
+        }
+        val sections = ArrayList<SpeedSection>()
+        for (relation in relations) {
+            val members = relation.optJSONArray("members") ?: continue
+            fun alongs(role: String) = (0 until members.length()).map { members.getJSONObject(it) }
+                .filter { it.optString("type") == "node" && it.optString("role") == role }
+                .mapNotNull { nodes[it.optLong("ref")] }
+                .mapNotNull { route.alongOf(it, 60.0) }
+            val from = alongs("from")
+            val to = alongs("to")
+            val devices = alongs("device")
+            val start: Double
+            val end: Double
+            if (from.isNotEmpty() && to.isNotEmpty()) {
+                // Začiatok musí byť pred koncom, inak ide o opačný smer.
+                start = from.min()
+                end = to.max()
+                if (end <= start) continue
+            } else if (devices.size >= 2) {
+                start = devices.min()
+                end = devices.max()
+            } else {
+                continue
+            }
+            if (end - start < 200) continue
+            val limit = parseMaxspeed(relation.optJSONObject("tags")?.optString("maxspeed"))
+            sections.add(SpeedSection(start, end, limit))
+        }
+        return sections.sortedBy { it.startAlong }
     }
 
     /**
@@ -167,7 +228,7 @@ object RoadData {
             if (list.isEmpty() || along - list.last() > 40) list.add(along)
             list
         }
-        return Result(null, sortedCameras, sortedSignals.toDoubleArray())
+        return Result(null, sortedCameras, sortedSignals.toDoubleArray(), sections = sectionsOrEmpty(route))
     }
 
     /** Dotaz na Overpass API (s náhradným serverom). */
