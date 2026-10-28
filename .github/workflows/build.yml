@@ -24,20 +24,20 @@ jobs:
         run: ./gradlew --no-daemon --stacktrace assembleRelease
 
       - name: Rename APK
-        run: cp app/build/outputs/apk/release/app-release.apk amap.apk
+        run: cp app/build/outputs/apk/release/app-release.apk lech-map.apk
 
       - uses: actions/upload-artifact@v4
         with:
-          name: amap-apk
-          path: amap.apk
+          name: lech-map-apk
+          path: lech-map.apk
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
-          name: amap 1.0.${{ github.run_number }}
+          name: lech-map 1.0.${{ github.run_number }}
           target_commitish: ${{ github.sha }}
           make_latest: true
-          files: amap.apk
+          files: lech-map.apk
           body: |
-            Stiahni `amap.apk` a nainštaluj do telefónu. Postup je v README.
+            Stiahni `lech-map.apk` a nainštaluj do telefónu. Postup je v README.

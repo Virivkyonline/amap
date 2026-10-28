@@ -1,6 +1,6 @@
-# amap
+# lech-map
 
-Vlastná navigácia pre Android, ktorá funguje aj v **Android Auto**.
+Vlastná navigácia **lech-map** pre Android, ktorá funguje aj v **Android Auto**.
 
 - vektorová mapa v štýle AMap v telefóne aj na obrazovke auta: tmavomodrá v noci,
   pri jazde tmavý asfalt so svetlými okrajmi, zelená trasa so šípkami, auto s kompasom, 3D budovy
@@ -49,7 +49,7 @@ Vlastná navigácia pre Android, ktorá funguje aj v **Android Auto**.
 ### 1. Stiahni APK
 
 Každá zmena v repozitári automaticky zostaví novú verziu (GitHub Actions).
-Hotový súbor je v **Releases** → najnovšie vydanie → `amap.apk`:
+Hotový súbor je v **Releases** → najnovšie vydanie → `lech-map.apk`:
 
 https://github.com/Virivkyonline/amap/releases/latest
 
@@ -59,11 +59,11 @@ Repozitár je súkromný, takže musíš byť prihlásený na GitHube.
 
 Vyber si jednu možnosť:
 
-- **Priamo v mobile:** otvor odkaz vyššie v prehliadači v mobile a stiahni `amap.apk`.
+- **Priamo v mobile:** otvor odkaz vyššie v prehliadači v mobile a stiahni `lech-map.apk`.
 - **Cez USB kábel z PC:** pripoj mobil, v mobile zvoľ „Prenos súborov“, skopíruj
-  `amap.apk` napr. do priečinka Download a v mobile ho otvor cez aplikáciu Súbory.
-- **Cez Google Drive:** nahraj `amap.apk` na Drive a v mobile ho otvor.
-- **Cez adb** (ak máš zapnuté ladenie USB): `adb install -r amap.apk`
+  `lech-map.apk` napr. do priečinka Download a v mobile ho otvor cez aplikáciu Súbory.
+- **Cez Google Drive:** nahraj `lech-map.apk` na Drive a v mobile ho otvor.
+- **Cez adb** (ak máš zapnuté ladenie USB): `adb install -r lech-map.apk`
 
 Pri otvorení APK mobil požiada o povolenie „Inštalovať neznáme aplikácie“ – povoľ ho.
 Ak sa ozve Play Protect, zvoľ „Podrobnosti“ → „Napriek tomu nainštalovať“.
@@ -72,7 +72,7 @@ Novšie verzie sa inštalujú rovnako, cez starú verziu (nastavenia ostanú).
 
 ### 3. Prvé spustenie v mobile
 
-Otvor **amap** a povoľ **presnú polohu** a **upozornenia** (pre navigáciu so zhasnutým displejom).
+Otvor **lech-map** a povoľ **presnú polohu** a **upozornenia** (pre navigáciu so zhasnutým displejom).
 
 ### 4. Zapnutie v Android Auto
 
@@ -83,7 +83,7 @@ Android Auto štandardne zobrazuje len aplikácie z Google Play. Pre vlastnú ap
 2. Úplne dole ťukni **10× na „Verzia“** a potvrď zapnutie režimu pre vývojárov.
 3. Vpravo hore cez **⋮** otvor **Nastavenia pre vývojárov**.
 4. Zaškrtni **„Neznáme zdroje“** (Unknown sources).
-5. Odpoj a znova pripoj mobil k autu. Ak amap nevidíš, v Android Auto nastaveniach
+5. Odpoj a znova pripoj mobil k autu. Ak lech-map nevidíš, v Android Auto nastaveniach
    otvor **Prispôsobiť spúšťač** a zapni ho tam.
 
 ### 5. Živá premávka (voliteľné)

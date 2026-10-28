@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Pozadie ikony lech-map: modrý prechod a jemné cesty ako na mape. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path android:pathData="M0,0h108v108h-108z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:endColor="#FF2F7BFF"
+                android:endX="108"
+                android:endY="108"
+                android:startColor="#FF0B2461"
+                android:startX="0"
+                android:startY="0"
+                android:type="linear" />
+        </aapt:attr>
+    </path>
+    <path
+        android:pathData="M-6,84 C26,74 58,98 114,78 M74,-6 C68,28 92,54 84,114 M-6,30 L114,18 M20,-6 C26,40 10,70 18,114"
+        android:strokeWidth="3"
+        android:strokeColor="#1AFFFFFF"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M16,47 C38,41 70,52 94,45 M61,16 C57,40 71,62 65,94"
+        android:strokeWidth="2"
+        android:strokeColor="#14FFFFFF"
+        android:strokeLineCap="round" />
+</vector>
