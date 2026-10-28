@@ -32,6 +32,8 @@ Vlastná navigácia pre Android, ktorá funguje aj v **Android Auto**.
   a trasa potom pokračuje do pôvodného cieľa
 - **parkovanie pri cieli**: 1,5 km pred cieľom sa na mape a v zozname ukážu parkoviská okolo
   cieľa; vybrané parkovisko sa stane novým cieľom bez prerušenia navigácie
+- **zdieľanie príchodu**: ťuknutím na čas v spodnej lište (alebo ikonou v náhľade trasy)
+  pošleš cieľ, čas príchodu a svoju polohu cez SMS, WhatsApp a pod.
 - navigáciu spustenú v mobile vidno v aute a naopak
 - dlhé podržanie prsta na mape v mobile = navigovať na to miesto
 

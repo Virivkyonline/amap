@@ -243,6 +243,8 @@ class MainActivity : Activity() {
         }
         findViewById<View>(R.id.save_place).setOnClickListener { nav.destination?.let { savePlaceDialog(it) } }
         findViewById<View>(R.id.route_prefs).setOnClickListener { showRouteOptions() }
+        findViewById<View>(R.id.share_trip).setOnClickListener { shareTrip() }
+        findViewById<View>(R.id.nav_info).setOnClickListener { shareTrip() }
         searchInput.setOnEditorActionListener { _, actionId, event ->
             if (actionId == EditorInfo.IME_ACTION_SEARCH || event?.keyCode == KeyEvent.KEYCODE_ENTER) {
                 search()
@@ -561,6 +563,28 @@ class MainActivity : Activity() {
                 if (i > 0) marginStart = (8 * d).toInt()
             })
         }
+    }
+
+    /** Zdieľanie cieľa a času príchodu (SMS, WhatsApp, …) s odkazmi na mapu. */
+    private fun shareTrip() {
+        val destination = nav.destination ?: return
+        val route = nav.route ?: return
+        val p = nav.progress
+        val navigating = nav.phase == Phase.NAVIGATING
+        val seconds = if (navigating && p != null) p.remainingSeconds else route.duration
+        val meters = if (navigating && p != null) p.remainingDistance else route.distance
+        val arrival = LocalTime.now().plusSeconds(seconds.toLong()).format(DateTimeFormatter.ofPattern("HH:mm"))
+        fun link(point: GeoPoint) =
+            "https://www.google.com/maps/search/?api=1&query=" + String.format(Locale.US, "%.5f,%.5f", point.lat, point.lon)
+        val text = buildString {
+            append(if (navigating) "Som na ceste do " else "Idem do ").append(destination.name).append(". ")
+            append("Príchod okolo ").append(arrival)
+            append(" (").append(Instructions.displayDuration(seconds)).append(", ").append(Instructions.displayDistance(meters)).append(").")
+            if (navigating) here()?.let { append("\nMoja poloha: ").append(link(it)) }
+            append("\nCieľ: ").append(link(destination.point))
+        }
+        val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text)
+        startActivity(Intent.createChooser(send, "Zdieľať príchod"))
     }
 
     /** Čomu sa má trasa vyhnúť; po zmene sa trasa prepočíta. */
