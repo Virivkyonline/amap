@@ -19,10 +19,11 @@ object RoadData {
     )
     private const val CHUNK = 4000
 
-    class Result(val speedLimits: IntArray, val cameras: List<Camera>, val trafficSignals: DoubleArray)
+    /** [speedLimits] je null, ak sa limity nezisťovali (trasa ich už má z TomTom). */
+    class Result(val speedLimits: IntArray?, val cameras: List<Camera>, val trafficSignals: DoubleArray)
 
     fun fetch(route: Route): Result? {
-        val nodeIds = route.nodeIds ?: return null
+        val nodeIds = route.nodeIds ?: return fetchAround(route)
         val unique = nodeIds.filter { it > 0 }.distinct()
         if (unique.isEmpty()) return null
 
@@ -80,6 +81,56 @@ object RoadData {
             .sorted()
             .toDoubleArray()
         return Result(speedLimits, cameras, signals)
+    }
+
+    /**
+     * Pre trasy bez OSM bodov (TomTom): radary a semafory v obdĺžnikoch pozdĺž trasy,
+     * potom ponecháme len tie, ktoré ležia na trase.
+     */
+    private fun fetchAround(route: Route): Result? {
+        if (route.points.size < 2) return null
+        val boxes = ArrayList<String>()
+        val chunk = 3000.0
+        var from = 0.0
+        while (from < route.distance) {
+            val part = route.slice(from, from + chunk)
+            val pad = 0.0006
+            val s = part.minOf { it.lat } - pad
+            val n = part.maxOf { it.lat } + pad
+            val w = part.minOf { it.lon } - pad
+            val e = part.maxOf { it.lon } + pad
+            boxes.add("$s,$w,$n,$e")
+            from += chunk
+        }
+        val query = StringBuilder("[out:json][timeout:60];(")
+        for (box in boxes.take(400)) {
+            query.append("node[highway=speed_camera]($box);node[highway=traffic_signals]($box);")
+        }
+        query.append(");out;")
+        val elements = JSONObject(post(query.toString())).optJSONArray("elements") ?: return null
+        val cameras = ArrayList<Camera>()
+        val signals = ArrayList<Double>()
+        for (i in 0 until elements.length()) {
+            val e = elements.getJSONObject(i)
+            val tags = e.optJSONObject("tags") ?: continue
+            val point = GeoPoint(e.optDouble("lat"), e.optDouble("lon"))
+            when (tags.optString("highway")) {
+                "speed_camera" -> route.alongOf(point, 45.0)?.let {
+                    cameras.add(Camera(point, it, parseMaxspeed(tags.optString("maxspeed"))))
+                }
+                "traffic_signals" -> route.alongOf(point, 12.0)?.let { signals.add(it) }
+            }
+        }
+        val sortedCameras = cameras.sortedBy { it.along }.fold(ArrayList<Camera>()) { list, camera ->
+            if (list.isEmpty() || camera.along - list.last().along > 30) list.add(camera)
+            list
+        }
+        // Semafory na jednej križovatke rátame raz.
+        val sortedSignals = signals.sorted().fold(ArrayList<Double>()) { list, along ->
+            if (list.isEmpty() || along - list.last() > 40) list.add(along)
+            list
+        }
+        return Result(null, sortedCameras, sortedSignals.toDoubleArray())
     }
 
     private fun post(query: String): String {

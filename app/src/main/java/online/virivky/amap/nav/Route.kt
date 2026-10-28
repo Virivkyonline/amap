@@ -11,6 +11,9 @@ class LaneInfo(val indications: List<String>, val valid: Boolean)
 /** Radar na trase: poloha, vzdialenosť od začiatku trasy a prípadný limit. */
 class Camera(val point: GeoPoint, val along: Double, val limit: Int?)
 
+/** Úsek trasy s premávkou medzi bodmi trasy: úroveň 1 = pomaly, 2 = zápcha, 3 = stojí/uzávierka. */
+class TrafficSpan(val startIndex: Int, val endIndex: Int, val level: Int)
+
 class RouteStep(
     /** Typ manévru z OSRM: turn, depart, arrive, roundabout, fork, ... */
     val type: String,
@@ -49,6 +52,12 @@ class Route(
     val duration: Double,
     /** OSM id bodov trasy (rovnaký počet ako [points]), ak ich server poslal. */
     val nodeIds: LongArray? = null,
+    /** Úseky so zhoršenou premávkou (len trasy z TomTom). */
+    val traffic: List<TrafficSpan> = emptyList(),
+    /** Zdrženie kvôli premávke v sekundách. */
+    val trafficDelay: Double = 0.0,
+    /** Trasa vypočítaná podľa živej premávky (TomTom). */
+    val live: Boolean = false,
 ) {
     private val cumulative = DoubleArray(points.size)
     val distance: Double
@@ -64,6 +73,17 @@ class Route(
     /** Vzdialenosti semaforov od začiatku trasy. Dopĺňajú sa dodatočne. */
     @Volatile
     var trafficSignals: DoubleArray = DoubleArray(0)
+
+    /** Úroveň premávky pre každý úsek trasy (0 = plynulo alebo neznáme). */
+    val segmentTraffic: IntArray by lazy {
+        val levels = IntArray(maxOf(0, points.size - 1))
+        for (span in traffic) {
+            for (i in span.startIndex.coerceAtLeast(0) until span.endIndex.coerceAtMost(levels.size)) {
+                if (span.level > levels[i]) levels[i] = span.level
+            }
+        }
+        levels
+    }
 
     fun alongAtIndex(index: Int) = cumulative[index.coerceIn(0, points.size - 1)]
 

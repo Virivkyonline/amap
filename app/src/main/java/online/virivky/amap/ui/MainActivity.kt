@@ -2,9 +2,11 @@ package online.virivky.amap.ui
 
 import android.Manifest
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.Configuration
+import android.net.Uri
 import android.graphics.Rect
 import android.location.Location
 import android.os.Build
@@ -18,7 +20,9 @@ import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.widget.Button
+import android.widget.CheckBox
 import android.widget.EditText
+import android.widget.LinearLayout
 import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.ListView
@@ -27,6 +31,7 @@ import android.widget.Toast
 import online.virivky.amap.R
 import online.virivky.amap.data.Place
 import online.virivky.amap.data.Recents
+import online.virivky.amap.data.Settings
 import online.virivky.amap.geo.GeoPoint
 import online.virivky.amap.location.LocationTracker
 import online.virivky.amap.map.DriveHud
@@ -37,6 +42,8 @@ import online.virivky.amap.nav.ManeuverIcons
 import online.virivky.amap.nav.NavigationController
 import online.virivky.amap.nav.NavigationController.Phase
 import online.virivky.amap.net.Geocoder
+import online.virivky.amap.net.Router
+import online.virivky.amap.net.TomTom
 import online.virivky.amap.util.Bg
 import online.virivky.amap.util.GeoUri
 import org.maplibre.android.maps.MapView
@@ -162,6 +169,7 @@ class MainActivity : Activity() {
             if (hasFocus && searchInput.text.isBlank()) showPlaces(Recents.all())
         }
         findViewById<View>(R.id.search_button).setOnClickListener { search() }
+        findViewById<View>(R.id.settings_button).setOnClickListener { showSettings() }
         zoomIn.setOnClickListener { navMap?.zoomIn() }
         zoomOut.setOnClickListener { navMap?.zoomOut() }
         myLocation.setOnClickListener { navMap?.recenter() }
@@ -206,6 +214,7 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
+        navMap?.dispose()
         mapView.onDestroy()
         super.onDestroy()
     }
@@ -354,8 +363,14 @@ class MainActivity : Activity() {
                 secondaryButton.text = "Zrušiť"
                 secondaryButton.setOnClickListener { nav.cancelPreview() }
                 if (route != null) {
+                    val delay = if (route.live && route.trafficDelay >= 60) {
+                        " · zdržanie ${Instructions.displayDuration(route.trafficDelay)}"
+                    } else {
+                        ""
+                    }
                     panelSubtitle.text = listOfNotNull(
-                        "${Instructions.displayDuration(route.duration)} · ${Instructions.displayDistance(route.distance)}",
+                        "${Instructions.displayDuration(route.duration)} · ${Instructions.displayDistance(route.distance)}$delay",
+                        if (route.live) "Podľa živej premávky (TomTom)" else null,
                         nav.destination?.address?.ifBlank { null },
                     ).joinToString("\n")
                     primaryButton.text = "Navigovať"
@@ -374,6 +389,67 @@ class MainActivity : Activity() {
         navMap?.update()
         hud.invalidate()
         updateViewport()
+    }
+
+    /** Nastavenia: kľúč TomTom pre živú premávku. */
+    private fun showSettings() {
+        val padding = (20 * resources.displayMetrics.density).toInt()
+        val info = TextView(this).apply {
+            text = "Živá premávka (TomTom)\n\n" +
+                "1. Zaregistrujte sa zdarma na developer.tomtom.com\n" +
+                "2. V časti „Keys“ skopírujte API kľúč a vložte ho sem.\n\n" +
+                "Bez kľúča navigácia funguje ďalej, len bez premávky."
+            textSize = 15f
+        }
+        val keyInput = EditText(this).apply {
+            hint = "API kľúč TomTom"
+            setSingleLine()
+            setText(Settings.tomtomKey.orEmpty())
+        }
+        val showTraffic = CheckBox(this).apply {
+            text = "Zobrazovať premávku na mape"
+            isChecked = Settings.showTraffic
+        }
+        val status = TextView(this).apply {
+            text = Router.lastTomTomError.orEmpty()
+            setTextColor(getColor(R.color.amap_red))
+        }
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(padding, padding / 2, padding, 0)
+            addView(info)
+            addView(keyInput)
+            addView(showTraffic)
+            addView(status)
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Nastavenia")
+            .setView(layout)
+            .setPositiveButton("Uložiť") { _, _ ->
+                val key = keyInput.text.toString().trim()
+                Settings.showTraffic = showTraffic.isChecked
+                Settings.tomtomKey = key.ifEmpty { null }
+                if (key.isNotEmpty()) {
+                    Toast.makeText(this, "Overujem kľúč…", Toast.LENGTH_SHORT).show()
+                    Bg.run({ TomTom.check(key) }) { result ->
+                        val error = result.getOrNull()
+                        Toast.makeText(
+                            this,
+                            error ?: "Kľúč TomTom funguje – živá premávka je zapnutá.",
+                            Toast.LENGTH_LONG,
+                        ).show()
+                    }
+                }
+            }
+            .setNeutralButton("Otvoriť TomTom") { _, _ ->
+                try {
+                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://developer.tomtom.com/")))
+                } catch (e: Exception) {
+                    Toast.makeText(this, "Nepodarilo sa otvoriť prehliadač", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton("Zrušiť", null)
+            .show()
     }
 
     /** Veľké číslo vzdialenosti s menšou sivou jednotkou (ako „113 m“). */

@@ -9,6 +9,7 @@ import android.graphics.RectF
 import android.graphics.Typeface
 import android.util.AttributeSet
 import android.view.View
+import online.virivky.amap.data.Settings
 import online.virivky.amap.location.LocationTracker
 import online.virivky.amap.nav.Instructions
 import online.virivky.amap.nav.NavigationController
@@ -176,7 +177,8 @@ class DriveHud @JvmOverloads constructor(context: Context, attrs: AttributeSet? 
         text.textSize = 10 * dp
         text.color = Color.argb(0xAA, 0xFF, 0xFF, 0xFF)
         text.textAlign = Paint.Align.LEFT
-        canvas.drawText("© OpenStreetMap · OpenFreeMap", area.left + 8 * dp, area.bottom - 6 * dp, text)
+        val label = "© OpenStreetMap · OpenFreeMap" + if (Settings.tomtomKey != null) " · © TomTom" else ""
+        canvas.drawText(label, area.left + 8 * dp, area.bottom - 6 * dp, text)
         text.textAlign = Paint.Align.CENTER
     }
 }

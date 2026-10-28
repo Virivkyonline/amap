@@ -12,6 +12,8 @@ Vlastná navigácia pre Android, ktorá funguje aj v **Android Auto**.
 - jazdné pruhy pred odbočkou (ktorým pruhom ísť)
 - rýchlostný limit a aktuálna rýchlosť, pri prekročení červená a hlasové upozornenie
 - radary na mape s hlasovým upozornením
+- **živá premávka (TomTom)**: farby premávky na cestách, trasa zafarbená podľa zápch,
+  výpočet trasy a času príchodu podľa premávky, každých 5 minút hľadanie rýchlejšej trasy
 - navigáciu spustenú v mobile vidno v aute a naopak
 - dlhé podržanie prsta na mape v mobile = navigovať na to miesto
 
@@ -57,6 +59,16 @@ Android Auto štandardne zobrazuje len aplikácie z Google Play. Pre vlastnú ap
 5. Odpoj a znova pripoj mobil k autu. Ak amap nevidíš, v Android Auto nastaveniach
    otvor **Prispôsobiť spúšťač** a zapni ho tam.
 
+### 5. Živá premávka (voliteľné)
+
+1. Zaregistruj sa zdarma na [developer.tomtom.com](https://developer.tomtom.com) (stačí e-mail, bez karty).
+2. V časti **Keys** skopíruj svoj API kľúč.
+3. V apke ťukni na **ozubené koliesko** vedľa vyhľadávania, vlož kľúč a daj **Uložiť**.
+   Apka kľúč hneď overí.
+
+Kľúč je uložený len v telefóne. Bez neho apka funguje ďalej, len bez premávky.
+Bezplatný program TomTom má denné limity, ktoré na bežné osobné jazdenie stačia.
+
 ## Ovládanie v aute
 
 - **Hľadať** – zadanie cieľa (počas jazdy auto písanie nedovolí, preto sú hneď
@@ -71,13 +83,14 @@ Android Auto štandardne zobrazuje len aplikácie z Google Play. Pre vlastnú ap
 |------|--------|
 | mapa (vektorové dlaždice, písma) | OpenFreeMap (tiles.openfreemap.org), vykresľuje MapLibre |
 | vyhľadávanie | Nominatim (nominatim.openstreetmap.org) |
-| výpočet trasy, jazdné pruhy | OSRM (router.project-osrm.org) |
+| výpočet trasy, jazdné pruhy | TomTom (s kľúčom, podľa premávky), inak OSRM (router.project-osrm.org) |
+| farby premávky na cestách | TomTom Traffic Flow (s kľúčom) |
 | rýchlostné limity, radary, semafory | Overpass API (overpass-api.de) |
 | hlas | prevod textu na reč v telefóne (slovenčina, inak čeština) |
 
 Sú to bezplatné verejné služby OpenStreetMap určené na bežné osobné použitie.
 Aplikácia potrebuje mobilné dáta; navštívené časti mapy si pamätá (do 50 MB).
-Nezobrazuje dopravné zápchy. Limity, pruhy a radary sú len tam, kde ich má
+Zápchy zobrazuje len s kľúčom TomTom. Limity, pruhy a radary sú len tam, kde ich má
 OpenStreetMap zakreslené (na hlavných cestách väčšinou áno) a zatiaľ sa ukazujú len počas navigácie.
 
 Ak hlas nehovorí po slovensky, v mobile nainštaluj slovenský hlas:

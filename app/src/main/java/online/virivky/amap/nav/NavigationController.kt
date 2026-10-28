@@ -5,6 +5,7 @@ import android.location.Location
 import android.os.SystemClock
 import online.virivky.amap.data.Place
 import online.virivky.amap.data.Recents
+import online.virivky.amap.data.Settings
 import online.virivky.amap.geo.Geo
 import online.virivky.amap.geo.GeoPoint
 import online.virivky.amap.location.LocationTracker
@@ -35,6 +36,7 @@ object NavigationController {
     private var offRouteCount = 0
     private var lastRerouteAt = 0L
     private var lastSpeedWarningAt = 0L
+    private var lastTrafficRefreshAt = 0L
 
     var phase = Phase.IDLE
         private set
@@ -159,7 +161,7 @@ object NavigationController {
         val p = progress
         val step = p?.let { route?.steps?.getOrNull(it.nextStepIndex) }
         val first = if (p != null && step != null) {
-            announced.add("far-${step.startIndex}")
+            announced.add("far-${(step.location.lat * 1e5).roundToInt()},${(step.location.lon * 1e5).roundToInt()}")
             ". O ${Instructions.spokenDistance(p.distanceToNextStep)} ${Instructions.phrase(step)}."
         } else {
             "."
@@ -200,7 +202,7 @@ object NavigationController {
         Bg.run({ RoadData.fetch(r) }) { result ->
             if (id != roadRequest || route !== r) return@run
             val data = result.getOrNull() ?: return@run
-            r.speedLimits = data.speedLimits
+            data.speedLimits?.let { r.speedLimits = it }
             r.cameras = data.cameras
             r.trafficSignals = data.trafficSignals
             val location = LocationTracker.last
@@ -210,17 +212,24 @@ object NavigationController {
         }
     }
 
-    private fun computeRoute(reroute: Boolean) {
+    /**
+     * Vypočíta trasu z aktuálnej polohy. [silent] = pravidelná kontrola premávky počas jazdy:
+     * bez hlásenia „prepočítavam“ a pri chybe sa ponechá pôvodná trasa.
+     */
+    private fun computeRoute(reroute: Boolean, silent: Boolean = false) {
         val target = destination ?: return
         val here = LocationTracker.last
         if (here == null) {
+            if (silent) return
             error = "Čakám na polohu GPS…"
             if (phase == Phase.ROUTING) phase = Phase.PREVIEW
             notifyChanged()
             return
         }
         val id = ++request
-        rerouting = reroute
+        if (!silent) rerouting = reroute
+        lastTrafficRefreshAt = SystemClock.elapsedRealtime()
+        val remainingBefore = progress?.remainingSeconds
         val heading = if (reroute) LocationTracker.heading else null
         Bg.run({ Router.route(GeoPoint(here), target.point, heading) }) { result ->
             if (id != request) return@run
@@ -232,12 +241,16 @@ object NavigationController {
                 loadRoadData(newRoute)
                 if (phase == Phase.NAVIGATING) {
                     progress = null
-                    announced.clear()
                     LocationTracker.last?.let { updateProgress(it) }
+                    val saved = (remainingBefore ?: 0.0) - newRoute.duration
+                    if (silent && remainingBefore != null && saved > max(120.0, remainingBefore * 0.1)) {
+                        speak("Našla sa rýchlejšia trasa, ušetríte ${(saved / 60).roundToInt()} minút.")
+                    }
                 } else {
                     phase = Phase.PREVIEW
                 }
             }.onFailure {
+                if (silent) return@onFailure
                 error = "Trasu sa nepodarilo vypočítať. Skontrolujte internet."
                 if (phase == Phase.ROUTING) phase = Phase.PREVIEW
             }
@@ -248,6 +261,12 @@ object NavigationController {
     private fun onLocation(location: Location) {
         if (phase != Phase.NAVIGATING) return
         updateProgress(location)
+        // So živou premávkou každých 5 minút overíme, či nie je rýchlejšia trasa.
+        if (phase == Phase.NAVIGATING && Settings.tomtomKey != null && !rerouting &&
+            SystemClock.elapsedRealtime() - lastTrafficRefreshAt > 5 * 60_000
+        ) {
+            computeRoute(reroute = true, silent = true)
+        }
         notifyChanged()
     }
 
@@ -289,7 +308,7 @@ object NavigationController {
             cameraAhead = camera
             cameraDistance = max(0.0, distance)
             val speed = if (location.hasSpeed()) location.speed.toDouble() else 0.0
-            if (distance < max(300.0, speed * 20) && announced.add("camera-${camera.along.roundToInt()}")) {
+            if (distance < max(300.0, speed * 20) && announced.add("camera-${(camera.point.lat * 1e5).roundToInt()},${(camera.point.lon * 1e5).roundToInt()}")) {
                 speak("Pozor, radar" + (camera.limit?.let { ", rýchlosť $it." } ?: "."), interrupt = false)
             }
         } else {
@@ -310,7 +329,7 @@ object NavigationController {
         val far = (speed * 25).coerceIn(250.0, 1500.0)
         val near = (speed * 7).coerceIn(40.0, 200.0)
         val d = p.distanceToNextStep
-        val key = step.startIndex
+        val key = "${(step.location.lat * 1e5).roundToInt()},${(step.location.lon * 1e5).roundToInt()}"
         if (d <= near && step.type != "arrive" && announced.add("near-$key")) {
             announced.add("far-$key")
             var text = Instructions.title(step)

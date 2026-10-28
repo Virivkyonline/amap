@@ -57,6 +57,15 @@
                 android:contentDescription="Hľadať"
                 android:src="@drawable/ic_search"
                 android:tint="@color/panel_text" />
+
+            <ImageButton
+                android:id="@+id/settings_button"
+                android:layout_width="@dimen/button"
+                android:layout_height="@dimen/button"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Nastavenia"
+                android:src="@drawable/ic_settings"
+                android:tint="@color/panel_text_secondary" />
         </LinearLayout>
 
         <LinearLayout

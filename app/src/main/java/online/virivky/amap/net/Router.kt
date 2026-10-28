@@ -1,5 +1,6 @@
 package online.virivky.amap.net
 
+import online.virivky.amap.data.Settings
 import online.virivky.amap.geo.Geo
 import online.virivky.amap.geo.GeoPoint
 import online.virivky.amap.geo.Polyline
@@ -11,9 +12,30 @@ import org.json.JSONObject
 import java.io.IOException
 import kotlin.math.roundToInt
 
-/** Výpočet trasy autom cez verejný OSRM server (dáta OpenStreetMap). */
+/**
+ * Výpočet trasy autom. S kľúčom TomTom podľa živej premávky, inak (alebo pri chybe)
+ * cez verejný OSRM server s dátami OpenStreetMap.
+ */
 object Router {
+    /** Posledná chyba TomTom (na zobrazenie v nastaveniach). */
+    @Volatile
+    var lastTomTomError: String? = null
+        private set
+
     fun route(from: GeoPoint, to: GeoPoint, heading: Float?): Route {
+        val key = Settings.tomtomKey
+        if (key != null) {
+            try {
+                return TomTom.route(key, from, to, heading).also { lastTomTomError = null }
+            } catch (e: Exception) {
+                lastTomTomError = if (e is HttpException && e.code == 403) "Kľúč TomTom nefunguje alebo je vyčerpaný denný limit."
+                else "TomTom nedostupný, použitá trasa bez premávky."
+            }
+        }
+        return osrm(from, to, heading)
+    }
+
+    fun osrm(from: GeoPoint, to: GeoPoint, heading: Float?): Route {
         val url = StringBuilder("https://router.project-osrm.org/route/v1/driving/")
             .append(from.lon).append(',').append(from.lat).append(';')
             .append(to.lon).append(',').append(to.lat)

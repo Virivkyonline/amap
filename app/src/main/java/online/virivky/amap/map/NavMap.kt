@@ -3,6 +3,7 @@ package online.virivky.amap.map
 import android.content.Context
 import android.graphics.Point
 import android.graphics.Rect
+import online.virivky.amap.data.Settings
 import online.virivky.amap.geo.Geo
 import online.virivky.amap.geo.GeoPoint
 import online.virivky.amap.location.LocationTracker
@@ -42,6 +43,14 @@ class NavMap(private val context: Context, val map: MapLibreMap, dark: Boolean) 
     private var shownCameras: Any? = null
     private var shownSignals: Any? = null
     private var shownDestination: GeoPoint? = null
+    private var trafficKey = Settings.trafficLayerKey
+    private val settingsListener: () -> Unit = {
+        val key = Settings.trafficLayerKey
+        if (key != trafficKey) {
+            trafficKey = key
+            loadStyle()
+        }
+    }
 
     init {
         map.uiSettings.isLogoEnabled = false
@@ -57,12 +66,18 @@ class NavMap(private val context: Context, val map: MapLibreMap, dark: Boolean) 
         LocationTracker.last?.let {
             map.moveCamera(CameraUpdateFactory.newLatLngZoom(LatLng(it.latitude, it.longitude), 15.0))
         } ?: map.moveCamera(CameraUpdateFactory.newLatLngZoom(LatLng(48.1486, 17.1077), 12.0))
+        Settings.addListener(settingsListener)
         loadStyle()
+    }
+
+    /** Uvoľní mapu (prestane počúvať zmeny nastavení). */
+    fun dispose() {
+        Settings.removeListener(settingsListener)
     }
 
     private fun loadStyle() {
         style = null
-        val builder = Style.Builder().fromJson(MapStyle.json(dark))
+        val builder = Style.Builder().fromJson(MapStyle.json(dark, trafficKey))
         MapIcons.all(context).forEach { (name, bitmap) -> builder.withImage(name, bitmap) }
         map.setStyle(builder) { loaded ->
             style = loaded
@@ -146,12 +161,9 @@ class NavMap(private val context: Context, val map: MapLibreMap, dark: Boolean) 
         // Trasa – počas jazdy len zostávajúca časť od auta.
         val segment = if (navigating) progress?.segmentIndex ?: 0 else -1
         if (route !== shownRoute || segment != shownSegment || snapped != null) {
-            val points = when {
-                route == null -> emptyList()
-                snapped != null -> listOf(snapped.snapped) + route.points.subList(snapped.segmentIndex + 1, route.points.size)
-                else -> route.points
-            }
-            s.getSourceAs<GeoJsonSource>("route")?.setGeoJson(lineString(points))
+            s.getSourceAs<GeoJsonSource>("route")?.setGeoJson(
+                if (route == null) EMPTY else routeFeatures(route, snapped?.segmentIndex ?: 0, snapped?.snapped)
+            )
             shownRoute = route
             shownSegment = segment
             // Svetlý žiar na prvých metroch trasy pred autom.
@@ -288,6 +300,31 @@ class NavMap(private val context: Context, val map: MapLibreMap, dark: Boolean) 
         if (animate) map.easeCamera(CameraUpdateFactory.newCameraPosition(position), 900, false)
         else map.moveCamera(CameraUpdateFactory.newCameraPosition(position))
     }
+
+    /** Trasa rozdelená na úseky podľa premávky (vlastnosť „level“ určuje farbu). */
+    private fun routeFeatures(route: Route, fromSegment: Int, head: GeoPoint?): String {
+        val levels = route.segmentTraffic
+        val features = ArrayList<String>()
+        var current = ArrayList<GeoPoint>()
+        var level = -1
+        for (i in fromSegment until route.points.size - 1) {
+            val segmentLevel = levels.getOrElse(i) { 0 }
+            if (segmentLevel != level) {
+                if (current.size >= 2) features.add(feature(current, level))
+                current = ArrayList()
+                current.add(if (i == fromSegment && head != null) head else route.points[i])
+                level = segmentLevel
+            } else if (current.isEmpty()) {
+                current.add(route.points[i])
+            }
+            current.add(route.points[i + 1])
+        }
+        if (current.size >= 2) features.add(feature(current, level))
+        return """{"type":"FeatureCollection","features":[${features.joinToString(",")}]}"""
+    }
+
+    private fun feature(points: List<GeoPoint>, level: Int) =
+        """{"type":"Feature","properties":{"level":$level},"geometry":{"type":"LineString","coordinates":[${points.joinToString(",") { coord(it) }}]}}"""
 
     companion object {
         private const val EMPTY = """{"type":"FeatureCollection","features":[]}"""

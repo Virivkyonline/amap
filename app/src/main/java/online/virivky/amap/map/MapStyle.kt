@@ -112,7 +112,14 @@ object MapStyle {
            "layout":{"line-cap":"round","line-join":"round"},
            "paint":{"line-color":$color,"line-width":$w}}"""
 
-    fun json(dark: Boolean): String {
+    /** Farba trasy podľa premávky na úseku (vlastnosť „level“ z TomTom). */
+    private fun trafficColor(free: String, slow: String, jam: String, stopped: String) =
+        """["match",["coalesce",["get","level"],0],1,"$slow",2,"$jam",3,"$stopped","$free"]"""
+
+    /**
+     * [trafficKey] = kľúč TomTom; ak je zadaný, na cesty sa prekreslí živá premávka.
+     */
+    fun json(dark: Boolean, trafficKey: String? = null): String {
         val c = if (dark) NIGHT else DAY
         val motorwayStops = arrayOf<Pair<Number, Number>>(5 to 0.6, 10 to 2.2, 14 to 8, 18 to 32)
         val majorStops = arrayOf<Pair<Number, Number>>(8 to 0.5, 12 to 2.2, 15 to 9, 18 to 28)
@@ -190,6 +197,12 @@ object MapStyle {
                 "paint":{"fill-color":"${c.building}","fill-opacity":${linear(14 to 0, 15 to 1)}}}"""
             )
             addAll(roads)
+            if (trafficKey != null) {
+                add(
+                    """{"id":"traffic","type":"raster","source":"traffic","minzoom":8,
+                    "paint":{"raster-opacity":${linear(8 to 0.75, 14 to 0.9)}}}"""
+                )
+            }
             add(
                 """{"id":"boundary","type":"line","source":"omt","source-layer":"boundary",
                 "filter":["all",["<=",["get","admin_level"],2],["!=",["get","maritime"],1]],
@@ -213,12 +226,14 @@ object MapStyle {
             add(
                 """{"id":"route-casing","type":"line","source":"route",
                 "layout":{"line-cap":"round","line-join":"round"},
-                "paint":{"line-color":"${c.routeCasing}","line-width":${linear(5 to 4, 12 to 8, 15 to 13, 17 to 19, 18 to 26)}}}"""
+                "paint":{"line-color":${trafficColor(c.routeCasing, "#c98400", "#b3261e", "#6b0d14")},
+                  "line-width":${linear(5 to 4, 12 to 8, 15 to 13, 17 to 19, 18 to 26)}}}"""
             )
             add(
                 """{"id":"route-line","type":"line","source":"route",
                 "layout":{"line-cap":"round","line-join":"round"},
-                "paint":{"line-color":"${c.route}","line-width":${linear(5 to 2.5, 12 to 5.5, 15 to 10, 17 to 15, 18 to 21)}}}"""
+                "paint":{"line-color":${trafficColor(c.route, "#ffb21e", "#f2453d", "#9b1622")},
+                  "line-width":${linear(5 to 2.5, 12 to 5.5, 15 to 10, 17 to 15, 18 to 21)}}}"""
             )
             add(
                 """{"id":"route-glow","type":"line","source":"route-head",
@@ -305,9 +320,15 @@ object MapStyle {
             )
         }
 
+        val traffic = if (trafficKey == null) "" else {
+            val style = if (dark) "relative0-dark" else "relative0"
+            val key = java.net.URLEncoder.encode(trafficKey, "UTF-8")
+            ""","traffic":{"type":"raster","tileSize":256,"minzoom":5,"maxzoom":22,"attribution":"© TomTom",
+              "tiles":["https://api.tomtom.com/traffic/map/4/tile/flow/$style/{z}/{x}/{y}.png?key=$key&tileSize=512&thickness=8"]}"""
+        }
         val sources = listOf("route", "arrow", "arrowhead", "cameras", "signals", "destination", "destination-line", "me")
             .joinToString(",") { """"$it":{"type":"geojson","data":$EMPTY}""" } +
-            ""","route-head":{"type":"geojson","lineMetrics":true,"data":$EMPTY}"""
+            ""","route-head":{"type":"geojson","lineMetrics":true,"data":$EMPTY}""" + traffic
 
         return """{"version":8,"name":"amap-${if (dark) "night" else "day"}",
             "glyphs":"https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf",

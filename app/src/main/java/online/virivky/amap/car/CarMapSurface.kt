@@ -152,6 +152,7 @@ class CarMapSurface(private val carContext: CarContext) : SurfaceCallback {
     override fun onClick(x: Float, y: Float) {}
 
     private fun release() {
+        navMap?.dispose()
         navMap = null
         mapView?.let {
             it.onPause()
