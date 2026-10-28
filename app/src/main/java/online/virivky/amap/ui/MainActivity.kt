@@ -711,7 +711,7 @@ class MainActivity : Activity() {
             if (poiAdapter.pois.isNotEmpty()) poiAdapter.pois = emptyList()
             return
         }
-        poiTitle.text = category.label + if (Services.alongRoute) " pozdĺž trasy" else " v okolí"
+        poiTitle.text = "${category.label} ${Services.areaLabel}"
         val found = Services.results
         poiStatus.text = when {
             Services.loading -> "Hľadám…"
@@ -742,6 +742,12 @@ class MainActivity : Activity() {
             nav.preview(poi.toPlace())
             return
         }
+        // Parkovisko pri cieli sa stane novým cieľom.
+        if (Services.atDestination) {
+            nav.navigateTo(poi.toPlace())
+            closeServices()
+            return
+        }
         AlertDialog.Builder(this)
             .setTitle(poi.name)
             .setMessage(poi.detail())
@@ -749,7 +755,10 @@ class MainActivity : Activity() {
                 nav.addStop(poi.toPlace())
                 closeServices()
             }
-            .setNeutralButton("Navigovať sem") { _, _ -> nav.preview(poi.toPlace()) }
+            .setNeutralButton("Navigovať sem") { _, _ ->
+                nav.navigateTo(poi.toPlace())
+                closeServices()
+            }
             .setNegativeButton("Zrušiť", null)
             .show()
     }

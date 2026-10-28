@@ -30,6 +30,8 @@ Vlastná navigácia pre Android, ktorá funguje aj v **Android Auto**.
   lekárne a bankomaty – v okolí, počas navigácie pozdĺž trasy
 - **zastávka po ceste**: počas navigácie vybraná nabíjačka či pumpa sa pridá ako zastávka
   a trasa potom pokračuje do pôvodného cieľa
+- **parkovanie pri cieli**: 1,5 km pred cieľom sa na mape a v zozname ukážu parkoviská okolo
+  cieľa; vybrané parkovisko sa stane novým cieľom bez prerušenia navigácie
 - navigáciu spustenú v mobile vidno v aute a naopak
 - dlhé podržanie prsta na mape v mobile = navigovať na to miesto
 

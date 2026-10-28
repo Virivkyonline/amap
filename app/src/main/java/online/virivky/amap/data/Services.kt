@@ -35,6 +35,18 @@ object Services {
     var alongRoute = false
         private set
 
+    /** Hľadalo sa pri cieli (parkovanie pred príchodom). */
+    var atDestination = false
+        private set
+
+    /** Kde sa hľadalo – do nadpisu („v okolí“, „pozdĺž trasy“, „pri cieli“). */
+    val areaLabel: String
+        get() = when {
+            atDestination -> "pri cieli"
+            alongRoute -> "pozdĺž trasy"
+            else -> "v okolí"
+        }
+
     fun init() {
         NavigationController.addListener {
             val phase = NavigationController.phase
@@ -56,18 +68,22 @@ object Services {
         listeners.forEach { it.onServicesChanged() }
     }
 
-    /** Vyhľadá služby danej kategórie okolo [near] (inak okolo polohy) alebo pozdĺž trasy. */
-    fun show(category: PoiCategory, near: GeoPoint? = null) {
+    /**
+     * Vyhľadá služby danej kategórie okolo [near] (inak okolo polohy) alebo pozdĺž trasy.
+     * [destination] = hľadanie okolo cieľa (parkovanie pred príchodom) v polomere [radius].
+     */
+    fun show(category: PoiCategory, near: GeoPoint? = null, destination: Boolean = false, radius: Int = category.radius) {
         val id = ++request
         val nav = NavigationController
         val route = nav.route
         val traveled = nav.progress?.traveled
-        val along = nav.phase == Phase.NAVIGATING && route != null && traveled != null
+        val along = !destination && nav.phase == Phase.NAVIGATING && route != null && traveled != null
         val center = near ?: LocationTracker.last?.let { GeoPoint(it) }
         val key = Settings.tomtomKey
         this.category = category
         results = emptyList()
         alongRoute = along
+        atDestination = destination
         error = null
         if (!along && center == null) {
             loading = false
@@ -79,13 +95,13 @@ object Services {
         notifyChanged()
         Bg.run({
             if (along) Pois.alongRoute(key, category, route!!, traveled!!)
-            else Pois.search(key, category, center!!, category.radius)
+            else Pois.search(key, category, center!!, radius)
         }) { result ->
             if (id != request) return@run
             loading = false
             result.onSuccess { found ->
                 results = found
-                if (found.isEmpty()) error = if (along) "Pozdĺž trasy sa nič nenašlo." else "V okolí sa nič nenašlo."
+                if (found.isEmpty()) error = "${areaLabel.replaceFirstChar { it.uppercase() }} sa nič nenašlo."
             }.onFailure {
                 error = "Služby sa nepodarilo načítať. Skontrolujte internet."
             }
@@ -111,6 +127,7 @@ object Services {
         loading = false
         error = null
         alongRoute = false
+        atDestination = false
         notifyChanged()
     }
 }

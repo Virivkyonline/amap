@@ -14,6 +14,7 @@ import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import online.virivky.amap.R
 import online.virivky.amap.data.Favorites
+import online.virivky.amap.data.Services
 import online.virivky.amap.data.Settings
 import online.virivky.amap.nav.Instructions
 import online.virivky.amap.nav.NavigationController
@@ -108,7 +109,17 @@ class MapScreen(carContext: CarContext, private val map: CarMapSurface) : Screen
                         .build()
                 )
                 if (nav.phase == Phase.NAVIGATING) {
-                    strip.addAction(servicesAction(withTitle = false))
+                    // Pred cieľom namiesto služieb rovno parkoviská pri cieli.
+                    if (nav.nearDestination && Services.atDestination) {
+                        strip.addAction(
+                            Action.Builder()
+                                .setTitle("Parkovanie")
+                                .setOnClickListener { screenManager.push(PoiListScreen(carContext)) }
+                                .build()
+                        )
+                    } else {
+                        strip.addAction(servicesAction(withTitle = false))
+                    }
                     // Pohľad: 3D → 2D v smere jazdy → 2D sever hore.
                     strip.addAction(
                         Action.Builder()

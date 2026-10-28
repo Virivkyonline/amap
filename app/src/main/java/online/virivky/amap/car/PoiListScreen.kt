@@ -42,11 +42,7 @@ class PoiListScreen(carContext: CarContext) : Screen(carContext) {
 
     override fun onGetTemplate(): Template {
         val category = Services.category
-        val title = when {
-            category == null -> "Služby"
-            Services.alongRoute -> "${category.label} pozdĺž trasy"
-            else -> "${category.label} v okolí"
-        }
+        val title = if (category == null) "Služby" else "${category.label} ${Services.areaLabel}"
         val builder = PlaceListNavigationTemplate.Builder()
             .setTitle(title)
             .setHeaderAction(Action.BACK)
@@ -76,7 +72,12 @@ class PoiListScreen(carContext: CarContext) : Screen(carContext) {
 
     private fun choose(poi: Poi) {
         val nav = NavigationController
-        if (nav.phase == Phase.NAVIGATING) {
+        if (nav.phase == Phase.NAVIGATING && Services.atDestination) {
+            // Parkovisko pri cieli: nový cieľ.
+            nav.navigateTo(poi.toPlace())
+            CarToast.makeText(carContext, "Cieľ: ${poi.name}", CarToast.LENGTH_SHORT).show()
+            screenManager.popToRoot()
+        } else if (nav.phase == Phase.NAVIGATING) {
             nav.addStop(poi.toPlace())
             CarToast.makeText(carContext, "Zastávka: ${poi.name}", CarToast.LENGTH_SHORT).show()
             screenManager.popToRoot()

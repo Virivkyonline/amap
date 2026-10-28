@@ -4,7 +4,9 @@ import android.content.Context
 import android.location.Location
 import android.os.SystemClock
 import online.virivky.amap.data.Place
+import online.virivky.amap.data.PoiCategory
 import online.virivky.amap.data.Recents
+import online.virivky.amap.data.Services
 import online.virivky.amap.data.Settings
 import online.virivky.amap.data.TrafficEvents
 import online.virivky.amap.geo.Geo
@@ -82,6 +84,10 @@ object NavigationController {
     var tunnelAhead: Tunnel? = null
         private set
     var tunnelDistance: Double? = null
+        private set
+
+    /** Blížime sa k cieľu (posledných 1,5 km) – ukážu sa parkoviská pri cieli. */
+    var nearDestination = false
         private set
 
     /** Najbližšia dopravná udalosť na trase (do 3 km) a vzdialenosť k nej. */
@@ -175,6 +181,21 @@ object NavigationController {
         computeRoute(reroute = false)
     }
 
+    /** Počas navigácie zmení cieľ (napr. na parkovisko) bez zastavenia navigácie; inak náhľad. */
+    fun navigateTo(place: Place) {
+        if (phase != Phase.NAVIGATING) {
+            preview(place)
+            return
+        }
+        destination = place
+        via = null
+        nearDestination = false
+        Recents.add(place)
+        speak("Nový cieľ ${place.name}.")
+        computeRoute(reroute = true)
+        notifyChanged()
+    }
+
     /** Výber iného variantu trasy v náhľade. */
     fun selectRoute(index: Int) {
         if (phase != Phase.PREVIEW) return
@@ -237,6 +258,7 @@ object NavigationController {
     fun start() {
         if (route == null) return
         routes = emptyList()
+        nearDestination = false
         phase = Phase.NAVIGATING
         announced.clear()
         offRouteCount = 0
@@ -277,6 +299,8 @@ object NavigationController {
         estimating = false
         Bg.main.removeCallbacks(ticker)
         clearRoadInfo()
+        nearDestination = false
+        if (Services.atDestination) Services.clear()
         TrafficEvents.refreshRoute(null, 0.0)
         voice.stop()
         NavigationService.stop(app)
@@ -383,6 +407,14 @@ object NavigationController {
         val here = GeoPoint(location)
         val p = r.locate(here, progress?.segmentIndex ?: 0)
         progress = p
+
+        // Pred cieľom ukážeme parkoviská v jeho okolí (na dlhších trasách).
+        val target = destination
+        if (!nearDestination && via == null && target != null && p.remainingDistance < 1500 && r.distance > 3000) {
+            nearDestination = true
+            Services.show(PoiCategory.PARKING, target.point, destination = true, radius = 800)
+            speak("Blížite sa k cieľu. Na mape sú parkoviská v okolí cieľa.", interrupt = false)
+        }
 
         // Pri zastávke (alebo keď ju trasa už minula) pokračujeme rovno do cieľa.
         via?.let { stop ->
