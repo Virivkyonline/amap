@@ -68,6 +68,26 @@
                 android:tint="@color/panel_text_secondary" />
         </LinearLayout>
 
+        <HorizontalScrollView
+            android:id="@+id/search_filters"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="-4dp"
+            android:clipToPadding="false"
+            android:paddingStart="@dimen/gap"
+            android:paddingTop="2dp"
+            android:paddingEnd="@dimen/gap"
+            android:paddingBottom="8dp"
+            android:scrollbars="none"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:id="@+id/filter_row"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal" />
+        </HorizontalScrollView>
+
         <LinearLayout
             android:id="@+id/instruction_card"
             android:layout_width="match_parent"
@@ -313,15 +333,32 @@
             android:padding="16dp"
             android:visibility="gone">
 
-            <TextView
-                android:id="@+id/panel_title"
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:ellipsize="end"
-                android:maxLines="2"
-                android:textColor="@color/panel_text"
-                android:textSize="20sp"
-                android:textStyle="bold" />
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/panel_title"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:ellipsize="end"
+                    android:maxLines="2"
+                    android:textColor="@color/panel_text"
+                    android:textSize="20sp"
+                    android:textStyle="bold" />
+
+                <ImageButton
+                    android:id="@+id/save_place"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:background="?android:attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="Uložiť ako Domov alebo Prácu"
+                    android:src="@drawable/ic_star"
+                    android:tint="@color/panel_text_secondary" />
+            </LinearLayout>
 
             <TextView
                 android:id="@+id/panel_subtitle"

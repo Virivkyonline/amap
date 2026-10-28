@@ -29,6 +29,16 @@ object Settings {
             listeners.forEach { it() }
         }
 
+    /** Naposledy zvolené kritériá hľadania (oblasť a poradie). */
+    var searchOptions: SearchOptions
+        get() = SearchOptions(
+            area = SearchArea.entries.firstOrNull { it.name == prefs.getString("search_area", null) } ?: SearchArea.NEARBY,
+            sort = SearchSort.entries.firstOrNull { it.name == prefs.getString("search_sort", null) } ?: SearchSort.NEAREST,
+        )
+        set(value) {
+            prefs.edit().putString("search_area", value.area.name).putString("search_sort", value.sort.name).apply()
+        }
+
     /** Kľúč, ak je premávka na mape zapnutá. */
     val trafficLayerKey: String?
         get() = if (showTraffic) tomtomKey else null

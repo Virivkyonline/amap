@@ -6,7 +6,11 @@ Vlastná navigácia pre Android, ktorá funguje aj v **Android Auto**.
   pri jazde tmavý asfalt so svetlými okrajmi, zelená trasa so šípkami, auto s kompasom, 3D budovy
 - čierny panel s odbočkou a pruhmi, rýchlosť v kruhu, limit pri názve ulice,
   spodná lišta s časom, km, počtom semaforov a časom príchodu
-- vyhľadanie adresy alebo miesta, nedávne ciele
+- vyhľadanie adresy alebo miesta s kritériami: **v okolí 50 km / Slovensko / všade**,
+  zoradenie **najbližšie / najlepšia zhoda**, **otvorené teraz** (otváracie hodiny);
+  s kľúčom TomTom aj návrhy počas písania
+- **Domov a Práca** (uložíš hviezdičkou v náhľade trasy alebo podržaním výsledku),
+  nedávne ciele, adresa bodu po podržaní prsta na mape
 - výpočet trasy autom a navigácia odbočka po odbočke
 - slovenské hlasové pokyny, automatický prepočet trasy pri zídení z cesty
 - jazdné pruhy pred odbočkou (ktorým pruhom ísť)
@@ -94,7 +98,7 @@ sa služby hľadajú v OpenStreetMap – nájdu sa tiež, len bez obsadenosti na
 | Časť | Služba |
 |------|--------|
 | mapa (vektorové dlaždice, písma) | OpenFreeMap (tiles.openfreemap.org), vykresľuje MapLibre |
-| vyhľadávanie | Nominatim (nominatim.openstreetmap.org) |
+| vyhľadávanie, adresa bodu | TomTom Search (s kľúčom), inak Nominatim (nominatim.openstreetmap.org) |
 | výpočet trasy, jazdné pruhy | TomTom (s kľúčom, podľa premávky), inak OSRM (router.project-osrm.org) |
 | farby premávky na cestách | TomTom Traffic Flow (s kľúčom) |
 | služby, nabíjačky a ich obsadenosť | TomTom Search a EV Availability (s kľúčom), inak Overpass API |

@@ -14,6 +14,8 @@ import android.graphics.drawable.GradientDrawable
 import android.location.Location
 import android.os.Build
 import android.os.Bundle
+import android.text.Editable
+import android.text.TextWatcher
 import android.text.SpannableString
 import android.text.Spanned
 import android.text.style.AbsoluteSizeSpan
@@ -33,10 +35,14 @@ import android.widget.ListView
 import android.widget.TextView
 import android.widget.Toast
 import online.virivky.amap.R
+import online.virivky.amap.data.Favorites
 import online.virivky.amap.data.Place
 import online.virivky.amap.data.Poi
 import online.virivky.amap.data.PoiCategory
 import online.virivky.amap.data.Recents
+import online.virivky.amap.data.SearchArea
+import online.virivky.amap.data.SearchOptions
+import online.virivky.amap.data.SearchSort
 import online.virivky.amap.data.Services
 import online.virivky.amap.data.Settings
 import online.virivky.amap.geo.GeoPoint
@@ -105,6 +111,24 @@ class MainActivity : Activity() {
     /** Počas navigácie: zobrazený rad so službami (tlačidlo v spodnej lište). */
     private var servicesOpen = false
 
+    private lateinit var searchFilters: View
+    private lateinit var areaChip: TextView
+    private lateinit var sortChip: TextView
+    private lateinit var openChip: TextView
+    private var searchOptions = Settings.searchOptions
+    private var searchRequest = 0
+
+    /** Návrhy počas písania (len s kľúčom TomTom). */
+    private val typeahead = Runnable {
+        val text = searchInput.text.toString().trim()
+        if (text.length < 3 || !searchInput.hasFocus()) return@Runnable
+        val id = ++searchRequest
+        Bg.run({ Geocoder.search(text, here(), searchOptions, typeahead = true) }) { result ->
+            if (id != searchRequest || searchInput.text.toString().trim() != text) return@run
+            result.getOrNull()?.places?.takeIf { it.isNotEmpty() }?.let { showPlaces(it) }
+        }
+    }
+
     private val navigationListener = NavigationController.Listener { render() }
     private val servicesListener = Services.Listener {
         // Obsadenosť nabíjačiek sa mení v tých istých položkách.
@@ -155,21 +179,22 @@ class MainActivity : Activity() {
         poiTitle = findViewById(R.id.poi_title)
         poiStatus = findViewById(R.id.poi_status)
         poiList = findViewById(R.id.poi_list)
+        searchFilters = findViewById(R.id.search_filters)
         hud.showAttribution = true
         buildCategories()
+        buildFilters()
 
         mapView.onCreate(savedInstanceState)
         mapView.getMapAsync { map ->
             navMap = NavMap(this, map, isDark).also { controller ->
                 controller.onFollowChanged = { render() }
                 map.addOnMapLongClickListener { latLng ->
-                    choose(
-                        Place(
-                            "Vybrané miesto",
-                            String.format(Locale.US, "%.5f, %.5f", latLng.latitude, latLng.longitude),
-                            GeoPoint(latLng.latitude, latLng.longitude),
-                        )
-                    )
+                    val point = GeoPoint(latLng.latitude, latLng.longitude)
+                    choose(Place("Vybrané miesto", String.format(Locale.US, "%.5f, %.5f", point.lat, point.lon), point))
+                    // Adresu doplníme, keď ju zistíme.
+                    Bg.run({ Geocoder.reverse(point) }) { result ->
+                        result.getOrNull()?.let { nav.relabel(point, it.name, it.address) }
+                    }
                     true
                 }
                 map.addOnMapClickListener { latLng ->
@@ -193,14 +218,10 @@ class MainActivity : Activity() {
         }
         results.setOnItemClickListener { _, _, position, _ -> choose(adapter.getItem(position)) }
         results.setOnItemLongClickListener { _, _, position, _ ->
-            val place = adapter.getItem(position)
-            if (searchInput.text.isBlank()) {
-                Recents.remove(place)
-                adapter.places = Recents.all()
-                Toast.makeText(this, "Odstránené z nedávnych", Toast.LENGTH_SHORT).show()
-            }
+            savePlaceDialog(adapter.getItem(position), fromRecents = searchInput.text.isBlank())
             true
         }
+        findViewById<View>(R.id.save_place).setOnClickListener { nav.destination?.let { savePlaceDialog(it) } }
         searchInput.setOnEditorActionListener { _, actionId, event ->
             if (actionId == EditorInfo.IME_ACTION_SEARCH || event?.keyCode == KeyEvent.KEYCODE_ENTER) {
                 search()
@@ -211,7 +232,23 @@ class MainActivity : Activity() {
         }
         searchInput.setOnFocusChangeListener { _, hasFocus ->
             if (hasFocus && searchInput.text.isBlank()) showPlaces(Recents.all())
+            updateSearchUi()
         }
+        searchInput.addTextChangedListener(object : TextWatcher {
+            override fun afterTextChanged(text: Editable?) {
+                Bg.main.removeCallbacks(typeahead)
+                val query = text?.toString()?.trim().orEmpty()
+                if (query.isEmpty()) {
+                    if (searchInput.hasFocus()) showPlaces(Recents.all())
+                } else if (Settings.tomtomKey != null && query.length >= 3 && searchInput.hasFocus()) {
+                    Bg.main.postDelayed(typeahead, 450)
+                }
+            }
+
+            override fun beforeTextChanged(text: CharSequence?, start: Int, count: Int, after: Int) {}
+
+            override fun onTextChanged(text: CharSequence?, start: Int, before: Int, count: Int) {}
+        })
         findViewById<View>(R.id.search_button).setOnClickListener { search() }
         findViewById<View>(R.id.settings_button).setOnClickListener { showSettings() }
         zoomIn.setOnClickListener { navMap?.zoomIn() }
@@ -283,10 +320,11 @@ class MainActivity : Activity() {
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
         when {
-            results.visibility == View.VISIBLE -> {
+            results.visibility == View.VISIBLE || searchInput.hasFocus() -> {
                 results.visibility = View.GONE
                 searchInput.clearFocus()
                 hideKeyboard()
+                updateSearchUi()
             }
             nav.phase == Phase.ROUTING || nav.phase == Phase.PREVIEW -> nav.cancelPreview()
             Services.category != null || servicesOpen -> closeServices()
@@ -326,17 +364,22 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun here(): GeoPoint? = LocationTracker.last?.let { GeoPoint(it) }
+
     private fun search() {
         val text = searchInput.text.toString().trim()
         if (text.isEmpty()) return
         hideKeyboard()
-        showPlaces(emptyList())
+        Bg.main.removeCallbacks(typeahead)
         Toast.makeText(this, "Hľadám…", Toast.LENGTH_SHORT).show()
-        val near = LocationTracker.last?.let { GeoPoint(it) }
-        Bg.run({ Geocoder.search(text, near) }) { result ->
+        val id = ++searchRequest
+        val options = searchOptions
+        Bg.run({ Geocoder.search(text, here(), options) }) { result ->
+            if (id != searchRequest) return@run
             result.onSuccess { found ->
-                if (found.isEmpty()) Toast.makeText(this, "Nič sa nenašlo", Toast.LENGTH_SHORT).show()
-                showPlaces(found)
+                if (found.places.isEmpty()) Toast.makeText(this, "Nič sa nenašlo", Toast.LENGTH_SHORT).show()
+                found.note?.let { Toast.makeText(this, it, Toast.LENGTH_LONG).show() }
+                showPlaces(found.places)
             }.onFailure {
                 Toast.makeText(this, "Vyhľadávanie zlyhalo. Skontrolujte internet.", Toast.LENGTH_LONG).show()
             }
@@ -344,9 +387,10 @@ class MainActivity : Activity() {
     }
 
     private fun showPlaces(places: List<Place>) {
-        adapter.here = LocationTracker.last?.let { GeoPoint(it) }
+        adapter.here = here()
         adapter.places = places
         results.visibility = if (places.isEmpty()) View.GONE else View.VISIBLE
+        updateSearchUi()
     }
 
     private fun choose(place: Place) {
@@ -354,6 +398,112 @@ class MainActivity : Activity() {
         searchInput.clearFocus()
         hideKeyboard()
         nav.preview(place)
+        updateSearchUi()
+    }
+
+    /** Počas hľadania filtre namiesto radu so službami. */
+    private fun updateSearchUi() {
+        val searching = searchBar.visibility == View.VISIBLE && (searchInput.hasFocus() || results.visibility == View.VISIBLE)
+        searchFilters.visibility = if (searching) View.VISIBLE else View.GONE
+        val phase = nav.phase
+        categories.visibility =
+            if ((phase == Phase.IDLE && !searching) || (phase == Phase.NAVIGATING && servicesOpen)) View.VISIBLE else View.GONE
+    }
+
+    /** Kritériá hľadania: oblasť, poradie, len otvorené. */
+    private fun buildFilters() {
+        val row = findViewById<LinearLayout>(R.id.filter_row)
+        val d = resources.displayMetrics.density
+        fun chip(onClick: () -> Unit) = TextView(this).apply {
+            textSize = 13f
+            setPadding((12 * d).toInt(), (6 * d).toInt(), (12 * d).toInt(), (6 * d).toInt())
+            elevation = 2 * d
+            setOnClickListener { onClick() }
+            row.addView(this, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                marginEnd = (8 * d).toInt()
+            })
+        }
+        areaChip = chip {
+            val areas = SearchArea.entries
+            AlertDialog.Builder(this)
+                .setTitle("Kde hľadať")
+                .setSingleChoiceItems(areas.map { it.label }.toTypedArray(), areas.indexOf(searchOptions.area)) { dialog, which ->
+                    setSearchOptions(searchOptions.copy(area = areas[which]))
+                    dialog.dismiss()
+                }
+                .show()
+        }
+        sortChip = chip {
+            val sorts = SearchSort.entries
+            AlertDialog.Builder(this)
+                .setTitle("Zoradiť")
+                .setSingleChoiceItems(sorts.map { it.label }.toTypedArray(), sorts.indexOf(searchOptions.sort)) { dialog, which ->
+                    setSearchOptions(searchOptions.copy(sort = sorts[which]))
+                    dialog.dismiss()
+                }
+                .show()
+        }
+        openChip = chip { setSearchOptions(searchOptions.copy(openNow = !searchOptions.openNow)) }
+        renderFilters()
+    }
+
+    private fun setSearchOptions(options: SearchOptions) {
+        searchOptions = options
+        Settings.searchOptions = options
+        renderFilters()
+        if (searchInput.text.isNotBlank()) search()
+    }
+
+    private fun renderFilters() {
+        val d = resources.displayMetrics.density
+        fun style(chip: TextView, selected: Boolean) {
+            chip.background = GradientDrawable().apply {
+                cornerRadius = 16 * d
+                setColor(if (selected) getColor(R.color.amap_blue) else getColor(R.color.panel))
+            }
+            chip.setTextColor(if (selected) Color.WHITE else getColor(R.color.panel_text))
+        }
+        areaChip.text = "${searchOptions.area.label} ▾"
+        sortChip.text = "${searchOptions.sort.label} ▾"
+        openChip.text = "Otvorené teraz"
+        style(areaChip, false)
+        style(sortChip, false)
+        style(openChip, searchOptions.openNow)
+    }
+
+    /** Uloženie miesta ako Domov či Práca (a odstránenie z nedávnych). */
+    private fun savePlaceDialog(place: Place, fromRecents: Boolean = false) {
+        val items = mutableListOf("Uložiť ako Domov", "Uložiť ako Prácu")
+        if (fromRecents) items += "Odstrániť z nedávnych"
+        AlertDialog.Builder(this)
+            .setTitle(place.name)
+            .setItems(items.toTypedArray()) { _, which ->
+                when (which) {
+                    0, 1 -> {
+                        val kind = if (which == 0) Favorites.Kind.HOME else Favorites.Kind.WORK
+                        Favorites.set(kind, place)
+                        Toast.makeText(this, "Uložené: ${kind.label}", Toast.LENGTH_SHORT).show()
+                    }
+                    2 -> {
+                        Recents.remove(place)
+                        adapter.places = Recents.all()
+                    }
+                }
+            }
+            .show()
+    }
+
+    private fun openFavorite(kind: Favorites.Kind) {
+        val place = Favorites.get(kind)
+        if (place != null) {
+            choose(place)
+        } else {
+            Toast.makeText(
+                this,
+                "${kind.label}: zatiaľ nie je uložené. Vyhľadaj miesto a v náhľade trasy ťukni na hviezdičku.",
+                Toast.LENGTH_LONG,
+            ).show()
+        }
     }
 
     /** Rad tlačidiel so službami pod vyhľadávaním (ako v AMap). */
@@ -382,6 +532,27 @@ class MainActivity : Activity() {
             setColor(getColor(R.color.amap_red))
         }
         stopChip.setTextColor(Color.WHITE)
+        for (kind in Favorites.Kind.entries) {
+            val icon = getDrawable(if (kind == Favorites.Kind.HOME) R.drawable.ic_home else R.drawable.ic_work)?.mutate()
+            icon?.setTint(getColor(R.color.amap_blue))
+            chip(kind.label, icon) { openFavorite(kind) }.apply {
+                background = GradientDrawable().apply {
+                    cornerRadius = 20 * d
+                    setColor(getColor(R.color.panel))
+                }
+                setTextColor(getColor(R.color.panel_text))
+                setOnLongClickListener {
+                    if (Favorites.get(kind) != null) {
+                        AlertDialog.Builder(this@MainActivity)
+                            .setMessage("Odstrániť uložené miesto ${kind.label}?")
+                            .setPositiveButton("Odstrániť") { _, _ -> Favorites.clear(kind) }
+                            .setNegativeButton("Zrušiť", null)
+                            .show()
+                    }
+                    true
+                }
+            }
+        }
         PoiCategory.entries.forEach { category ->
             chips[category] = chip(category.label, BitmapDrawable(resources, PoiIcons.badge(category, (26 * d).toInt()))) {
                 if (Services.category == category) Services.clear() else Services.show(category, searchCenter())
@@ -502,8 +673,7 @@ class MainActivity : Activity() {
         mapControls.visibility = if (zoomIn.visibility == View.GONE && myLocation.visibility == View.GONE) View.GONE else View.VISIBLE
         primaryButton.isEnabled = true
         if (phase != Phase.NAVIGATING) servicesOpen = false
-        categories.visibility =
-            if (phase == Phase.IDLE || (phase == Phase.NAVIGATING && servicesOpen)) View.VISIBLE else View.GONE
+        updateSearchUi()
         renderServices()
 
         when (phase) {

@@ -3,7 +3,18 @@ package online.virivky.amap.data
 import online.virivky.amap.geo.GeoPoint
 import org.json.JSONObject
 
-data class Place(val name: String, val address: String, val point: GeoPoint) {
+/**
+ * Miesto (cieľ, výsledok hľadania). [kind] = druh miesta („Supermarket“), [hours] = stav
+ * otváracích hodín na zobrazenie a [open] = či je práve otvorené (null = nevieme).
+ */
+data class Place(
+    val name: String,
+    val address: String,
+    val point: GeoPoint,
+    val kind: String = "",
+    val hours: String = "",
+    val open: Boolean? = null,
+) {
     fun toJson(): JSONObject = JSONObject()
         .put("name", name)
         .put("address", address)

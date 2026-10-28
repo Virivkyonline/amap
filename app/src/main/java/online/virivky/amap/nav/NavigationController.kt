@@ -159,6 +159,16 @@ object NavigationController {
         computeRoute(reroute = false)
     }
 
+    /** Doplní názov a adresu cieľa (napr. po zistení adresy bodu z mapy). */
+    fun relabel(point: GeoPoint, name: String, address: String) {
+        val current = destination ?: return
+        if (current.point != point) return
+        val place = current.copy(name = name, address = address)
+        destination = place
+        Recents.add(place)
+        notifyChanged()
+    }
+
     /**
      * Počas navigácie pridá zastávku (napr. nabíjačku) a trasa povedie cez ňu do pôvodného cieľa.
      * Mimo navigácie len naplánuje trasu k miestu.

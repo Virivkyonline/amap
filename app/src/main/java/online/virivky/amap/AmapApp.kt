@@ -1,6 +1,7 @@
 package online.virivky.amap
 
 import android.app.Application
+import online.virivky.amap.data.Favorites
 import online.virivky.amap.data.Recents
 import online.virivky.amap.data.Services
 import online.virivky.amap.data.Settings
@@ -13,6 +14,7 @@ class AmapApp : Application() {
         super.onCreate()
         MapLibre.getInstance(this)
         Recents.init(this)
+        Favorites.init(this)
         Settings.init(this)
         LocationTracker.init(this)
         NavigationController.init(this)

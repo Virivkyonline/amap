@@ -12,6 +12,7 @@ import androidx.car.app.navigation.model.RoutingInfo
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import online.virivky.amap.R
+import online.virivky.amap.data.Favorites
 import online.virivky.amap.nav.Instructions
 import online.virivky.amap.nav.NavigationController
 import online.virivky.amap.nav.NavigationController.Phase
@@ -133,6 +134,19 @@ class MapScreen(carContext: CarContext, private val map: CarMapSurface) : Screen
             Phase.IDLE -> {
                 strip.addAction(searchAction(withTitle = true))
                 strip.addAction(servicesAction(withTitle = true))
+                // Rýchla cesta domov a do práce, ak sú uložené.
+                for (kind in Favorites.Kind.entries) {
+                    val place = Favorites.get(kind) ?: continue
+                    strip.addAction(
+                        Action.Builder()
+                            .setIcon(carContext.carIcon(if (kind == Favorites.Kind.HOME) R.drawable.ic_home else R.drawable.ic_work))
+                            .setOnClickListener {
+                                nav.preview(place)
+                                screenManager.push(RoutePreviewScreen(carContext))
+                            }
+                            .build()
+                    )
+                }
             }
         }
         return strip.build()
