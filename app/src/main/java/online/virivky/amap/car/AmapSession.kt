@@ -115,16 +115,17 @@ class AmapSession : Session() {
                 val step = route.steps[p.nextStepIndex]
                 trip.addStep(CarUi.step(step), CarUi.estimate(p.distanceToNextStep, p.secondsToNextStep))
                 Instructions.road(route.steps[max(0, p.nextStepIndex - 1)])?.let { trip.setCurrentRoad(it) }
-                // Zastávka ako prvý cieľ s vlastným časom príchodu.
-                val stop = nav.via
-                val stopStep = route.steps.indexOfFirst { it.type == "waypoint" }
-                if (stop != null && stopStep >= p.nextStepIndex) {
-                    var seconds = p.secondsToNextStep
-                    for (k in p.nextStepIndex until stopStep) seconds += route.steps[k].duration
-                    trip.addDestination(
-                        Destination.Builder().setName(stop.name.ifBlank { "Zastávka" }).build(),
-                        CarUi.estimate(route.stepAlong(stopStep) - p.traveled, seconds),
-                    )
+                // Zastávky ako prvé ciele, každá s vlastným časom príchodu.
+                nav.stops.forEachIndexed { i, stop ->
+                    val stopStep = nav.stopStepIndex(route, i)
+                    if (stopStep >= p.nextStepIndex) {
+                        var seconds = p.secondsToNextStep
+                        for (k in p.nextStepIndex until stopStep) seconds += route.steps[k].duration
+                        trip.addDestination(
+                            Destination.Builder().setName(stop.name.ifBlank { "Zastávka" }).build(),
+                            CarUi.estimate(route.stepAlong(stopStep) - p.traveled, seconds),
+                        )
+                    }
                 }
                 trip.addDestination(
                     Destination.Builder().setName(nav.destination?.name?.ifBlank { null } ?: "Cieľ").build(),

@@ -23,9 +23,9 @@ object Router {
     var lastTomTomError: String? = null
         private set
 
-    /** Trasa z [from] do [to], prípadne cez zastávku [via]. */
-    fun route(from: GeoPoint, to: GeoPoint, heading: Float?, via: GeoPoint? = null): Route =
-        routes(from, to, heading, via).first()
+    /** Trasa z [from] do [to], prípadne cez zastávky [vias]. */
+    fun route(from: GeoPoint, to: GeoPoint, heading: Float?, vias: List<GeoPoint> = emptyList()): Route =
+        routes(from, to, heading, vias).first()
 
     /**
      * Trasa a pri [alternatives] aj iné varianty (najlepšia je prvá). Rešpektuje nastavenia,
@@ -35,35 +35,35 @@ object Router {
         from: GeoPoint,
         to: GeoPoint,
         heading: Float?,
-        via: GeoPoint? = null,
+        vias: List<GeoPoint> = emptyList(),
         alternatives: Boolean = false,
         options: RouteOptions = Settings.routeOptions,
     ): List<Route> {
         val key = Settings.tomtomKey
         if (key != null) {
             try {
-                return TomTom.routes(key, from, to, heading, via, alternatives, options).also { lastTomTomError = null }
+                return TomTom.routes(key, from, to, heading, vias, alternatives, options).also { lastTomTomError = null }
             } catch (e: Exception) {
                 lastTomTomError = if (e is HttpException && e.code == 403) "Kľúč TomTom nefunguje alebo je vyčerpaný denný limit."
                 else "TomTom nedostupný, použitá trasa bez premávky."
             }
         }
-        return osrm(from, to, heading, via, alternatives, options)
+        return osrm(from, to, heading, vias, alternatives, options)
     }
 
     fun osrm(
         from: GeoPoint,
         to: GeoPoint,
         heading: Float?,
-        via: GeoPoint? = null,
+        vias: List<GeoPoint> = emptyList(),
         alternatives: Boolean = false,
         options: RouteOptions = RouteOptions(),
     ): List<Route> {
-        val points = listOfNotNull(from, via, to)
+        val points = listOf(from) + vias + to
         val url = StringBuilder("https://router.project-osrm.org/route/v1/driving/")
             .append(points.joinToString(";") { "${it.lon},${it.lat}" })
             .append("?overview=full&steps=true&geometries=polyline6&annotations=nodes")
-            .append("&alternatives=").append(alternatives && via == null)
+            .append("&alternatives=").append(alternatives && vias.isEmpty())
         // Verejný server vie vylúčiť len jeden druh ciest naraz.
         when {
             options.avoidMotorways -> url.append("&exclude=motorway")

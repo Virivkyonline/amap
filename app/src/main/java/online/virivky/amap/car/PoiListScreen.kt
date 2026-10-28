@@ -78,8 +78,9 @@ class PoiListScreen(carContext: CarContext) : Screen(carContext) {
             CarToast.makeText(carContext, "Cieľ: ${poi.name}", CarToast.LENGTH_SHORT).show()
             screenManager.popToRoot()
         } else if (nav.phase == Phase.NAVIGATING) {
-            nav.addStop(poi.toPlace())
-            CarToast.makeText(carContext, "Zastávka: ${poi.name}", CarToast.LENGTH_SHORT).show()
+            val added = nav.addStop(poi.toPlace())
+            val message = if (added) "Zastávka: ${poi.name}" else "Najviac ${NavigationController.MAX_STOPS} zastávky"
+            CarToast.makeText(carContext, message, CarToast.LENGTH_SHORT).show()
             screenManager.popToRoot()
         } else {
             nav.preview(poi.toPlace())

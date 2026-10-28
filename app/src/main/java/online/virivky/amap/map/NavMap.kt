@@ -6,6 +6,7 @@ import android.graphics.Rect
 import android.graphics.RectF
 import online.virivky.amap.data.MapTheme
 import online.virivky.amap.data.MapPerspective
+import online.virivky.amap.data.Place
 import online.virivky.amap.data.Poi
 import online.virivky.amap.data.Services
 import online.virivky.amap.data.Settings
@@ -64,7 +65,7 @@ class NavMap(
     private var shownCameras: Any? = null
     private var shownSignals: Any? = null
     private var shownDestination: GeoPoint? = null
-    private var shownVia: GeoPoint? = null
+    private var shownStops: List<Place>? = null
     private var shownPois: List<Poi>? = null
     private var fittedPois: List<Poi>? = null
     private var shownAlternatives: List<Route>? = null
@@ -126,7 +127,7 @@ class NavMap(
             shownCameras = null
             shownSignals = null
             shownDestination = null
-            shownVia = null
+            shownStops = null
             shownPois = null
             shownAlternatives = null
             shownIncidents = null
@@ -337,10 +338,13 @@ class NavMap(
             shownIncidents = incidentSource
         }
 
-        val via = nav.via?.point
-        if (via != shownVia) {
-            s.getSourceAs<GeoJsonSource>("via")?.setGeoJson(via?.let { point(it) } ?: EMPTY)
-            shownVia = via
+        val stops = nav.stops
+        if (stops !== shownStops) {
+            s.getSourceAs<GeoJsonSource>("via")?.setGeoJson(
+                if (stops.isEmpty()) EMPTY
+                else """{"type":"FeatureCollection","features":[${stops.joinToString(",") { point(it.point) }}]}"""
+            )
+            shownStops = stops
         }
 
         val destination = nav.destination?.point

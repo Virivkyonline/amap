@@ -21,11 +21,11 @@ class ServicesScreen(carContext: CarContext) : Screen(carContext) {
     override fun onGetTemplate(): Template {
         val nav = NavigationController
         val list = ItemList.Builder()
-        nav.via?.let { stop ->
+        if (nav.stops.isNotEmpty()) {
             list.addItem(
                 GridItem.Builder()
-                    .setTitle("Zrušiť zastávku")
-                    .setText(stop.name.ifBlank { "Zastávka" })
+                    .setTitle(if (nav.stops.size == 1) "Zrušiť zastávku" else "Zrušiť zastávky")
+                    .setText(nav.stops.joinToString(", ") { it.name.ifBlank { "Zastávka" } })
                     .setImage(carContext.carIcon(R.drawable.ic_close), GridItem.IMAGE_TYPE_ICON)
                     .setOnClickListener {
                         nav.removeStop()

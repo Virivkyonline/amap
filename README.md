@@ -28,8 +28,9 @@ Vlastná navigácia pre Android, ktorá funguje aj v **Android Auto**.
 - **služby na mape**: nabíjačky pre elektromobily (s kľúčom TomTom aj počet voľných
   nabíjacích bodov), pumpy, parkovanie, odpočívadlá, jedlo, káva, potraviny, ubytovanie,
   lekárne a bankomaty – v okolí, počas navigácie pozdĺž trasy
-- **zastávka po ceste**: počas navigácie vybraná nabíjačka či pumpa sa pridá ako zastávka
-  a trasa potom pokračuje do pôvodného cieľa
+- **zastávky po ceste** (až 3): počas navigácie vybraná nabíjačka či pumpa sa pridá ako zastávka,
+  zastávky sa zoradia podľa trasy a potom trasa pokračuje do pôvodného cieľa; každú zastávku
+  možno zrušiť zvlášť (tlačidlo Zastávky)
 - **parkovanie pri cieli**: 1,5 km pred cieľom sa na mape a v zozname ukážu parkoviská okolo
   cieľa; vybrané parkovisko sa stane novým cieľom bez prerušenia navigácie
 - **počasie v cieli** v čase príchodu (teplota, dážď, sneh, búrka) v náhľade trasy

@@ -29,6 +29,8 @@ import kotlin.math.roundToInt
 object NavigationController {
     enum class Phase { IDLE, ROUTING, PREVIEW, NAVIGATING, ARRIVED }
 
+    const val MAX_STOPS = 3
+
     fun interface Listener {
         fun onNavigationChanged()
     }
@@ -49,9 +51,16 @@ object NavigationController {
     var destination: Place? = null
         private set
 
-    /** Zastávka pred cieľom (napr. nabíjačka), ak je pridaná. */
-    var via: Place? = null
+    /** Zastávky pred cieľom (napr. nabíjačka), v poradí po trase; najviac [MAX_STOPS]. */
+    var stops: List<Place> = emptyList()
         private set
+
+    /** Najbližšia zastávka. */
+    val via: Place?
+        get() = stops.firstOrNull()
+
+    /** Koľko zastávok aktuálnej trasy sme už prešli (k párovaniu so zastávkami v pokynoch). */
+    private var stopsPassed = 0
     var route: Route? = null
         private set
 
@@ -178,7 +187,7 @@ object NavigationController {
     fun preview(place: Place) {
         if (phase == Phase.NAVIGATING || phase == Phase.ARRIVED) stopInternal()
         destination = place
-        via = null
+        stops = emptyList()
         route = null
         routes = emptyList()
         progress = null
@@ -196,12 +205,18 @@ object NavigationController {
             return
         }
         destination = place
-        via = null
+        stops = emptyList()
         nearDestination = false
         Recents.add(place)
         speak("Nový cieľ ${place.name}.")
         computeRoute(reroute = true)
         notifyChanged()
+    }
+
+    /** Index pokynu zastávky [i] (0 = najbližšia) v trase [r], -1 ak ho trasa nemá. */
+    fun stopStepIndex(r: Route, i: Int): Int {
+        if (r !== route) return -1
+        return r.steps.indices.filter { r.steps[it].type == "waypoint" }.getOrNull(stopsPassed + i) ?: -1
     }
 
     /** Predpoveď v cieli pre čas príchodu (raz pre každý cieľ). */
@@ -241,23 +256,33 @@ object NavigationController {
 
     /**
      * Počas navigácie pridá zastávku (napr. nabíjačku) a trasa povedie cez ňu do pôvodného cieľa.
-     * Mimo navigácie len naplánuje trasu k miestu.
+     * Zastávky sa zoradia podľa polohy na trase. Mimo navigácie len naplánuje trasu k miestu.
+     * Vráti false, ak už je zastávok najviac.
      */
-    fun addStop(place: Place) {
+    fun addStop(place: Place): Boolean {
         if (phase != Phase.NAVIGATING) {
             preview(place)
-            return
+            return true
         }
-        via = place
+        if (stops.size >= MAX_STOPS) {
+            speak("Viac zastávok sa pridať nedá.")
+            return false
+        }
+        val r = route
+        val traveled = progress?.traveled ?: 0.0
+        // Poradie podľa vzdialenosti po aktuálnej trase (mimo trasy na koniec).
+        fun order(p: Place) = r?.alongOf(p.point, 5000.0)?.takeIf { it >= traveled } ?: Double.MAX_VALUE
+        stops = (stops + place).sortedBy { order(it) }
         speak("Pridávam zastávku ${place.name}.")
         computeRoute(reroute = true)
         notifyChanged()
+        return true
     }
 
-    /** Zruší zastávku a trasa povedie priamo do cieľa. */
-    fun removeStop() {
-        if (via == null) return
-        via = null
+    /** Zruší zastávku [place] (bez neho všetky) a trasa sa prepočíta. */
+    fun removeStop(place: Place? = null) {
+        if (stops.isEmpty()) return
+        stops = if (place == null) emptyList() else stops.filter { it != place }
         if (phase == Phase.NAVIGATING) computeRoute(reroute = true)
         notifyChanged()
     }
@@ -312,7 +337,7 @@ object NavigationController {
         request++
         phase = Phase.IDLE
         destination = null
-        via = null
+        stops = emptyList()
         route = null
         routes = emptyList()
         destinationWeather = null
@@ -377,14 +402,15 @@ object NavigationController {
         lastTrafficRefreshAt = SystemClock.elapsedRealtime()
         val remainingBefore = progress?.remainingSeconds
         val heading = if (reroute) LocationTracker.heading else null
-        val stop = via?.point
+        val vias = stops.map { it.point }
         // V náhľade aj iné varianty trasy na výber.
-        val alternatives = phase != Phase.NAVIGATING && stop == null
-        Bg.run({ Router.routes(GeoPoint(here), target.point, heading, stop, alternatives) }) { result ->
+        val alternatives = phase != Phase.NAVIGATING && vias.isEmpty()
+        Bg.run({ Router.routes(GeoPoint(here), target.point, heading, vias, alternatives) }) { result ->
             if (id != request) return@run
             rerouting = false
             result.onSuccess { found ->
                 val newRoute = found.first()
+                stopsPassed = 0
                 loadWeather(target, newRoute.duration)
                 route = newRoute
                 routes = if (phase == Phase.NAVIGATING) emptyList() else found
@@ -441,11 +467,12 @@ object NavigationController {
             speak("Blížite sa k cieľu. Na mape sú parkoviská v okolí cieľa.", interrupt = false)
         }
 
-        // Pri zastávke (alebo keď ju trasa už minula) pokračujeme rovno do cieľa.
+        // Pri zastávke (alebo keď ju trasa už minula) pokračujeme k ďalšej, resp. do cieľa.
         via?.let { stop ->
-            val stopStep = r.steps.indexOfFirst { it.type == "waypoint" }
+            val stopStep = stopStepIndex(r, 0)
             if (Geo.distance(here, stop.point) < 60 || (stopStep >= 0 && p.nextStepIndex > stopStep)) {
-                via = null
+                stops = stops.drop(1)
+                stopsPassed++
                 speak("Ste pri zastávke ${stop.name}.")
             }
         }

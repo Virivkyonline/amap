@@ -660,10 +660,10 @@ class MainActivity : Activity() {
                 marginEnd = (8 * d).toInt()
             })
         }
-        stopChip = chip("Zrušiť zastávku", getDrawable(R.drawable.ic_close)?.mutate()?.apply {
+        stopChip = chip("Zastávky", getDrawable(R.drawable.ic_close)?.mutate()?.apply {
             setTint(Color.WHITE)
             setBounds(0, 0, (24 * d).toInt(), (24 * d).toInt())
-        }) { nav.removeStop() }
+        }) { manageStops() }
         stopChip.background = GradientDrawable().apply {
             cornerRadius = 20 * d
             setColor(getColor(R.color.amap_red))
@@ -725,7 +725,8 @@ class MainActivity : Activity() {
             styledCategory = Services.category
             chipsStyled = true
         }
-        stopChip.visibility = if (nav.via != null) View.VISIBLE else View.GONE
+        stopChip.visibility = if (nav.stops.isNotEmpty()) View.VISIBLE else View.GONE
+        stopChip.text = if (nav.stops.size == 1) "Zrušiť zastávku" else "Zastávky (${nav.stops.size})"
 
         val category = Services.category
         val phase = nav.phase
@@ -754,6 +755,21 @@ class MainActivity : Activity() {
         }
     }
 
+    /** Zastávky na trase: jednu zrušíme hneď, pri viacerých výber. */
+    private fun manageStops() {
+        val stops = nav.stops
+        if (stops.size <= 1) {
+            nav.removeStop()
+            return
+        }
+        val items = stops.map { "Zrušiť: ${it.name}" } + "Zrušiť všetky zastávky"
+        AlertDialog.Builder(this)
+            .setTitle("Zastávky")
+            .setItems(items.toTypedArray()) { _, which -> nav.removeStop(stops.getOrNull(which)) }
+            .setNegativeButton("Zavrieť", null)
+            .show()
+    }
+
     private fun placesCount(n: Int) = when (n) {
         1 -> "1 miesto"
         in 2..4 -> "$n miesta"
@@ -776,8 +792,11 @@ class MainActivity : Activity() {
             .setTitle(poi.name)
             .setMessage(poi.detail())
             .setPositiveButton("Pridať zastávku") { _, _ ->
-                nav.addStop(poi.toPlace())
-                closeServices()
+                if (nav.addStop(poi.toPlace())) {
+                    closeServices()
+                } else {
+                    Toast.makeText(this, "Najviac ${NavigationController.MAX_STOPS} zastávky", Toast.LENGTH_SHORT).show()
+                }
             }
             .setNeutralButton("Navigovať sem") { _, _ ->
                 nav.navigateTo(poi.toPlace())

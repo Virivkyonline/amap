@@ -19,8 +19,8 @@ import kotlin.math.roundToInt
 object TomTom {
     private const val BASE = "https://api.tomtom.com/routing/1/calculateRoute/"
 
-    fun route(key: String, from: GeoPoint, to: GeoPoint, heading: Float?, via: GeoPoint? = null): Route =
-        routes(key, from, to, heading, via).first()
+    fun route(key: String, from: GeoPoint, to: GeoPoint, heading: Float?, vias: List<GeoPoint> = emptyList()): Route =
+        routes(key, from, to, heading, vias).first()
 
     /** Trasa a pri [alternatives] až dva ďalšie varianty. */
     fun routes(
@@ -28,12 +28,12 @@ object TomTom {
         from: GeoPoint,
         to: GeoPoint,
         heading: Float?,
-        via: GeoPoint? = null,
+        vias: List<GeoPoint> = emptyList(),
         alternatives: Boolean = false,
         options: RouteOptions = RouteOptions(),
     ): List<Route> {
-        val points = listOfNotNull(from, via, to)
-        val more = alternatives && via == null
+        val points = listOf(from) + vias + to
+        val more = alternatives && vias.isEmpty()
         return try {
             parseAll(JSONObject(Http.getString(url(key, points, heading, extended = true, more, options))))
         } catch (e: HttpException) {
