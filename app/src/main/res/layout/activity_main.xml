@@ -386,6 +386,15 @@
                     android:textStyle="bold" />
 
                 <ImageButton
+                    android:id="@+id/travel_mode"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:background="?android:attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="Autom alebo pešo"
+                    android:src="@drawable/ic_car"
+                    android:tint="@color/amap_blue" />
+
+                <ImageButton
                     android:id="@+id/share_trip"
                     android:layout_width="40dp"
                     android:layout_height="40dp"

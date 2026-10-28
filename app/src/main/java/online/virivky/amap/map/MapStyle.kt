@@ -256,12 +256,6 @@ object MapStyle {
                   "fill-extrusion-base":["coalesce",["get","render_min_height"],0]}}"""
             )
 
-            // Čiara k cieľu (tenká červená, ako v AMap).
-            add(
-                """{"id":"destination-line","type":"line","source":"destination-line",
-                "paint":{"line-color":"#e5333a","line-width":1.3,"line-opacity":0.85}}"""
-            )
-
             // Iné varianty trasy v náhľade (sivé, ťuknutím sa vyberú).
             add(
                 """{"id":"alt-casing","type":"line","source":"alternatives",
@@ -472,6 +466,14 @@ object MapStyle {
                 """{"id":"via","type":"symbol","source":"via",
                 "layout":{"icon-image":"pin-via","icon-anchor":"bottom","icon-allow-overlap":true,"icon-ignore-placement":true}}"""
             )
+            // Moje miesta: hviezdička s názvom.
+            add(
+                """{"id":"saved","type":"symbol","source":"saved",
+                "layout":{"icon-image":"pin-saved","icon-anchor":"bottom","icon-allow-overlap":true,"icon-ignore-placement":true,
+                  "text-field":["get","name"],"text-font":["Noto Sans Regular"],"text-size":12,"text-anchor":"top",
+                  "text-offset":[0,0.2],"text-optional":true,"text-max-width":9},
+                "paint":{"text-color":"${if (dark) "#ffd27a" else "#8a5300"}","text-halo-color":"${c.halo}","text-halo-width":1.5}}"""
+            )
             add(
                 """{"id":"destination","type":"symbol","source":"destination",
                 "layout":{"icon-image":"pin","icon-anchor":"bottom","icon-allow-overlap":true,"icon-ignore-placement":true}}"""
@@ -497,7 +499,7 @@ object MapStyle {
         val sources = listOf(
             "route", "alternatives", "route-labels", "incidents", "incident-lines", "lanes", "lane-marks", "crossings", "arrow", "arrowhead", "cameras",
             "signals", "pois", "via",
-            "destination", "destination-line", "me",
+            "destination", "saved", "me",
         )
             .joinToString(",") { """"$it":{"type":"geojson","data":$EMPTY}""" } +
             ""","route-head":{"type":"geojson","lineMetrics":true,"data":$EMPTY}""" + traffic

@@ -9,6 +9,10 @@ Vlastná navigácia **lech-map** pre Android, ktorá funguje aj v **Android Auto
 - vyhľadanie adresy alebo miesta (aj **hlasom** – mikrofón pri vyhľadávaní) s kritériami: **v okolí 50 km / Slovensko / všade**,
   zoradenie **najbližšie / najlepšia zhoda**, **otvorené teraz** (otváracie hodiny);
   s kľúčom TomTom aj návrhy počas písania
+- **Moje miesta** (tlačidlo pod vyhľadávaním): uloženie miesta, kde práve si (napr. v lese), s názvom;
+  miesta sú na mape ako hviezdičky, zoradené od najbližšieho, dajú sa premenovať, zdieľať a odstrániť;
+  k miestu sa dá **navigovať pešo** (po chodníkoch a lesných cestách, posledný kúsok priamo k miestu;
+  bez internetu vzdušnou čiarou) alebo autom; prepínač Autom/Pešo je aj v náhľade trasy
 - **Domov a Práca** (uložíš hviezdičkou v náhľade trasy alebo podržaním výsledku),
   nedávne ciele, adresa bodu po podržaní prsta na mape
 - výpočet trasy autom a navigácia odbočka po odbočke

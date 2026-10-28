@@ -8,6 +8,7 @@ import online.virivky.amap.data.PoiCategory
 import online.virivky.amap.data.Recents
 import online.virivky.amap.data.Services
 import online.virivky.amap.data.Settings
+import online.virivky.amap.data.TravelMode
 import online.virivky.amap.data.TrafficEvents
 import online.virivky.amap.geo.Geo
 import online.virivky.amap.geo.GeoPoint
@@ -46,6 +47,8 @@ object NavigationController {
     private var request = 0
     private var roadRequest = 0
     private var offRouteCount = 0
+    /** Auto už bolo na trase (potom sa „prichádzanie na trasu“ zo začiatku neuplatňuje). */
+    private var everOnRoute = false
     private var lastRerouteAt = 0L
     private var lastSpeedWarningAt = 0L
     private var lastTrafficRefreshAt = 0L
@@ -54,6 +57,13 @@ object NavigationController {
         private set
     var destination: Place? = null
         private set
+
+    /** Autom alebo pešo (pešia trasa, bez premávky, radarov a rýchlostných limitov). */
+    var travelMode = TravelMode.CAR
+        private set
+
+    private val onFoot: Boolean
+        get() = travelMode == TravelMode.FOOT
 
     /** Zastávky pred cieľom (napr. nabíjačka), v poradí po trase; najviac [MAX_STOPS]. */
     var stops: List<Place> = emptyList()
@@ -208,8 +218,9 @@ object NavigationController {
     }
 
     /** Vypočíta trasu k cieľu a zobrazí náhľad. */
-    fun preview(place: Place) {
+    fun preview(place: Place, mode: TravelMode = TravelMode.CAR) {
         if (phase == Phase.NAVIGATING || phase == Phase.ARRIVED) stopInternal()
+        travelMode = mode
         destination = place
         stops = emptyList()
         route = null
@@ -311,6 +322,13 @@ object NavigationController {
         notifyChanged()
     }
 
+    /** Prepne autom/pešo v náhľade trasy (trasa sa vypočíta znova). */
+    fun setTravelMode(mode: TravelMode) {
+        if (mode == travelMode) return
+        travelMode = mode
+        if (phase == Phase.ROUTING || phase == Phase.PREVIEW) retry() else notifyChanged()
+    }
+
     fun retry() {
         if (destination == null) return
         error = null
@@ -334,6 +352,7 @@ object NavigationController {
         announced.clear()
         offRouteCount = 0
         offRoute = false
+        everOnRoute = false
         progress = null
         NavigationService.start(app)
         lastFixAt = SystemClock.elapsedRealtime()
@@ -436,7 +455,11 @@ object NavigationController {
         val vias = stops.map { it.point }
         // V náhľade aj iné varianty trasy na výber; pri prepočte za jazdy varianty na vyhnutie sa otáčaniu.
         val alternatives = vias.isEmpty() && (phase != Phase.NAVIGATING || (reroute && !silent))
-        Bg.run({ Router.routes(GeoPoint(here), target.point, heading, vias, alternatives) }) { result ->
+        val foot = onFoot
+        Bg.run({
+            if (foot) listOf(Router.walk(GeoPoint(here), target.point))
+            else Router.routes(GeoPoint(here), target.point, heading, vias, alternatives)
+        }) { result ->
             if (id != request) return@run
             rerouting = false
             result.onSuccess { found ->
@@ -447,11 +470,12 @@ object NavigationController {
                 routes = if (phase == Phase.NAVIGATING) emptyList() else found
                 error = null
                 clearRoadInfo()
-                loadRoadData(newRoute)
+                if (!foot) loadRoadData(newRoute)
                 if (phase == Phase.NAVIGATING) {
                     progress = null
+                    everOnRoute = false
                     LocationTracker.last?.let { updateProgress(it) }
-                    TrafficEvents.refreshRoute(newRoute, progress?.traveled ?: 0.0)
+                    TrafficEvents.refreshRoute(if (foot) null else newRoute, progress?.traveled ?: 0.0)
                     val saved = (remainingBefore ?: 0.0) - newRoute.duration
                     if (silent && remainingBefore != null && saved > max(120.0, remainingBefore * 0.1)) {
                         val minutes = (saved / 60).roundToInt()
@@ -489,7 +513,7 @@ object NavigationController {
         estimating = false
         updateProgress(location)
         // So živou premávkou každých 5 minút overíme, či nie je rýchlejšia trasa.
-        if (phase == Phase.NAVIGATING && Settings.tomtomKey != null && !rerouting &&
+        if (phase == Phase.NAVIGATING && !onFoot && Settings.tomtomKey != null && !rerouting &&
             SystemClock.elapsedRealtime() - lastTrafficRefreshAt > 5 * 60_000
         ) {
             computeRoute(reroute = true, silent = true)
@@ -498,14 +522,19 @@ object NavigationController {
     }
 
     private fun updateProgress(location: Location) {
-        val r = route ?: return
+        var r = route ?: return
         val here = GeoPoint(location)
+        // Pešo vzdušnou čiarou: čiara vždy z miesta, kde som (bez siete, bez prepočtu).
+        val target = destination
+        if (r.direct && target != null && r.distanceTo(here) > 15) {
+            r = Router.direct(here, target.point)
+            route = r
+        }
         val p = r.locate(here, progress?.segmentIndex ?: 0)
         progress = p
 
-        // Pred cieľom ukážeme parkoviská v jeho okolí (na dlhších trasách).
-        val target = destination
-        if (!nearDestination && via == null && target != null && p.remainingDistance < 1500 && r.distance > 3000) {
+        // Pred cieľom ukážeme parkoviská v jeho okolí (na dlhších trasách autom).
+        if (!onFoot && !nearDestination && via == null && target != null && p.remainingDistance < 1500 && r.distance > 3000) {
             nearDestination = true
             Services.show(PoiCategory.PARKING, target.point, destination = true, radius = 800)
             speak("Blížite sa k cieľu. Na mape sú parkoviská v okolí cieľa.", interrupt = false)
@@ -530,9 +559,11 @@ object NavigationController {
 
         // Zídenie z trasy: len keď auto ide (na parkovisku GPS „pláva“) a nie na začiatku,
         // keď z parkoviska či dvora ešte len prichádzame na trasu.
-        val tolerance = max(40.0, location.accuracy * 1.5)
-        val moving = (speedOf(location) ?: 0.0) >= 2.5
-        val joining = p.traveled < 50 && Geo.distance(here, r.points.first()) < 400
+        val tolerance = max(if (onFoot) 30.0 else 40.0, location.accuracy * 1.5)
+        val moving = (speedOf(location) ?: 0.0) >= if (onFoot) 0.6 else 2.5
+        if (p.offRouteDistance <= tolerance) everOnRoute = true
+        // Z parkoviska či dvora na trasu: kým na nej auto nebolo, a len blízko jej začiatku.
+        val joining = !everOnRoute && Geo.distance(here, r.points.first()) < 150
         offRouteCount = if (p.offRouteDistance > tolerance && moving && !joining) offRouteCount + 1 else 0
         val now = SystemClock.elapsedRealtime()
         offRoute = offRouteCount > 0

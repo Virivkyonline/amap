@@ -45,6 +45,7 @@ import online.virivky.amap.data.Place
 import online.virivky.amap.data.Poi
 import online.virivky.amap.data.PoiCategory
 import online.virivky.amap.data.Recents
+import online.virivky.amap.data.SavedPlaces
 import online.virivky.amap.data.RouteOptions
 import online.virivky.amap.data.SearchArea
 import online.virivky.amap.data.SearchOptions
@@ -52,6 +53,8 @@ import online.virivky.amap.data.SearchSort
 import online.virivky.amap.data.Services
 import online.virivky.amap.data.Settings
 import online.virivky.amap.data.TrafficEvents
+import online.virivky.amap.data.TravelMode
+import online.virivky.amap.geo.Geo
 import online.virivky.amap.geo.GeoPoint
 import online.virivky.amap.location.LocationTracker
 import online.virivky.amap.map.DriveHud
@@ -69,7 +72,10 @@ import online.virivky.amap.net.TomTom
 import online.virivky.amap.util.Bg
 import online.virivky.amap.util.GeoUri
 import org.maplibre.android.maps.MapView
+import java.time.Instant
+import java.time.LocalDateTime
 import java.time.LocalTime
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
@@ -114,6 +120,7 @@ class MainActivity : Activity() {
     private val adapter = PlaceAdapter()
     private val poiAdapter = PoiAdapter()
     private val chips = LinkedHashMap<PoiCategory, TextView>()
+    private lateinit var travelModeButton: ImageButton
     private lateinit var stopChip: TextView
     private var styledCategory: PoiCategory? = null
     private var chipsStyled = false
@@ -219,6 +226,10 @@ class MainActivity : Activity() {
                 map.addOnMapClickListener { latLng ->
                     hideKeyboard()
                     val screen = map.projection.toScreenLocation(latLng)
+                    controller.savedAt(screen.x, screen.y)?.let {
+                        placeActions(it)
+                        return@addOnMapClickListener true
+                    }
                     val poi = controller.poiAt(screen.x, screen.y)
                     // Ťuk na sivý variant trasy ho vyberie.
                     val alternative = if (poi == null && nav.phase == Phase.PREVIEW) controller.alternativeAt(screen.x, screen.y) else null
@@ -247,6 +258,10 @@ class MainActivity : Activity() {
         }
         findViewById<View>(R.id.save_place).setOnClickListener { nav.destination?.let { savePlaceDialog(it) } }
         findViewById<View>(R.id.route_prefs).setOnClickListener { showRouteOptions() }
+        travelModeButton = findViewById(R.id.travel_mode)
+        travelModeButton.setOnClickListener {
+            nav.setTravelMode(if (nav.travelMode == TravelMode.FOOT) TravelMode.CAR else TravelMode.FOOT)
+        }
         findViewById<View>(R.id.share_trip).setOnClickListener { shareTrip() }
         findViewById<View>(R.id.nav_info).setOnClickListener { shareTrip() }
         searchInput.setOnEditorActionListener { _, actionId, event ->
@@ -456,11 +471,11 @@ class MainActivity : Activity() {
         updateSearchUi()
     }
 
-    private fun choose(place: Place) {
+    private fun choose(place: Place, mode: TravelMode = TravelMode.CAR) {
         results.visibility = View.GONE
         searchInput.clearFocus()
         hideKeyboard()
-        nav.preview(place)
+        nav.preview(place, mode)
         updateSearchUi()
     }
 
@@ -616,7 +631,7 @@ class MainActivity : Activity() {
 
     /** Uloženie miesta ako Domov či Práca (a odstránenie z nedávnych). */
     private fun savePlaceDialog(place: Place, fromRecents: Boolean = false) {
-        val items = mutableListOf("Uložiť ako Domov", "Uložiť ako Prácu")
+        val items = mutableListOf("Uložiť ako Domov", "Uložiť ako Prácu", "Uložiť do Mojich miest")
         if (fromRecents) items += "Odstrániť z nedávnych"
         AlertDialog.Builder(this)
             .setTitle(place.name)
@@ -628,12 +643,112 @@ class MainActivity : Activity() {
                         Toast.makeText(this, "Uložené: ${kind.label}", Toast.LENGTH_SHORT).show()
                     }
                     2 -> {
+                        SavedPlaces.add(place.name, place.point)
+                        Toast.makeText(this, "Uložené do Mojich miest: ${place.name}", Toast.LENGTH_SHORT).show()
+                    }
+                    3 -> {
                         Recents.remove(place)
                         adapter.places = Recents.all()
                     }
                 }
             }
             .show()
+    }
+
+    /** Moje miesta: uloženie miesta, kde som (napr. v lese), a zoznam uložených od najbližšieho. */
+    private fun showSavedPlaces() {
+        val here = here()
+        val places = SavedPlaces.all.sortedBy { if (here == null) 0.0 else Geo.distance(here, it.point) }
+        val dates = DateTimeFormatter.ofPattern("d. M. yyyy")
+        val labels = listOf("＋  Uložiť miesto, kde som") + places.map { place ->
+            val distance = here?.let { " · " + Instructions.displayDistance(Geo.distance(it, place.point)) }.orEmpty()
+            "★  ${place.name}$distance · ${Instant.ofEpochMilli(place.savedAt).atZone(ZoneId.systemDefault()).format(dates)}"
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Moje miesta")
+            .setItems(labels.toTypedArray()) { _, which ->
+                if (which == 0) saveMyLocation() else placeActions(places[which - 1])
+            }
+            .setNegativeButton("Zavrieť", null)
+            .show()
+    }
+
+    /** Uloží aktuálnu polohu z GPS pod zvoleným názvom. */
+    private fun saveMyLocation() {
+        val location = LocationTracker.last
+        if (location == null) {
+            Toast.makeText(this, "Čakám na polohu GPS…", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val input = EditText(this).apply {
+            setSingleLine()
+            setText("Miesto " + LocalDateTime.now().format(DateTimeFormatter.ofPattern("d. M. HH:mm")))
+            setSelectAllOnFocus(true)
+        }
+        val age = (System.currentTimeMillis() - location.time) / 1000
+        val info = buildList {
+            if (location.hasAccuracy()) add("Presnosť polohy ±${location.accuracy.toInt()} m")
+            if (age > 120) add("Poloha je ${age / 60} min stará – počkaj na GPS pod holým nebom.")
+        }.joinToString("\n")
+        AlertDialog.Builder(this)
+            .setTitle("Uložiť miesto, kde som")
+            .setMessage(info.ifEmpty { null })
+            .setView(padded(input))
+            .setPositiveButton("Uložiť") { _, _ ->
+                val saved = SavedPlaces.add(input.text.toString().trim(), GeoPoint(location))
+                Toast.makeText(this, "Uložené: ${saved.name}", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("Zrušiť", null)
+            .show()
+        input.requestFocus()
+    }
+
+    /** Čo s uloženým miestom: navigovať pešo či autom, ukázať, premenovať, zdieľať, odstrániť. */
+    private fun placeActions(saved: SavedPlaces.Saved) {
+        val actions = arrayOf("Navigovať pešo", "Navigovať autom", "Ukázať na mape", "Premenovať", "Zdieľať", "Odstrániť")
+        AlertDialog.Builder(this)
+            .setTitle(saved.name)
+            .setItems(actions) { _, which ->
+                when (which) {
+                    0 -> choose(saved.toPlace(), TravelMode.FOOT)
+                    1 -> choose(saved.toPlace(), TravelMode.CAR)
+                    2 -> navMap?.showPoint(saved.point)
+                    3 -> {
+                        val input = EditText(this).apply {
+                            setSingleLine()
+                            setText(saved.name)
+                            setSelectAllOnFocus(true)
+                        }
+                        AlertDialog.Builder(this)
+                            .setTitle("Premenovať")
+                            .setView(padded(input))
+                            .setPositiveButton("Uložiť") { _, _ -> SavedPlaces.rename(saved.id, input.text.toString().trim()) }
+                            .setNegativeButton("Zrušiť", null)
+                            .show()
+                    }
+                    4 -> {
+                        val link = "https://www.google.com/maps/search/?api=1&query=" +
+                            String.format(Locale.US, "%.6f,%.6f", saved.point.lat, saved.point.lon)
+                        val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, "${saved.name}\n$link")
+                        startActivity(Intent.createChooser(send, "Zdieľať miesto"))
+                    }
+                    5 -> AlertDialog.Builder(this)
+                        .setMessage("Odstrániť ${saved.name}?")
+                        .setPositiveButton("Odstrániť") { _, _ -> SavedPlaces.remove(saved.id) }
+                        .setNegativeButton("Zrušiť", null)
+                        .show()
+                }
+            }
+            .show()
+    }
+
+    /** Pole v dialógu s okrajmi. */
+    private fun padded(view: View): View {
+        val pad = (20 * resources.displayMetrics.density).toInt()
+        return LinearLayout(this).apply {
+            setPadding(pad, pad / 2, pad, 0)
+            addView(view, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        }
     }
 
     private fun openFavorite(kind: Favorites.Kind) {
@@ -695,6 +810,15 @@ class MainActivity : Activity() {
                     true
                 }
             }
+        }
+        val star = getDrawable(R.drawable.ic_star)?.mutate()
+        star?.setTint(0xFFF2A100.toInt())
+        chip("Moje miesta", star) { showSavedPlaces() }.apply {
+            background = GradientDrawable().apply {
+                cornerRadius = 20 * d
+                setColor(getColor(R.color.panel))
+            }
+            setTextColor(getColor(R.color.panel_text))
         }
         PoiCategory.entries.forEach { category ->
             chips[category] = chip(category.label, BitmapDrawable(resources, PoiIcons.badge(category, (26 * d).toInt()))) {
@@ -873,8 +997,11 @@ class MainActivity : Activity() {
                     } else {
                         ""
                     }
+                    val foot = nav.travelMode == TravelMode.FOOT
                     panelSubtitle.text = listOfNotNull(
-                        "${Instructions.displayDuration(route.duration)} · ${Instructions.displayDistance(route.distance)}$delay",
+                        (if (foot) "Pešo · " else "") +
+                            "${Instructions.displayDuration(route.duration)} · ${Instructions.displayDistance(route.distance)}$delay",
+                        if (route.direct) "Vzdušnou čiarou – chodník sa nenašiel alebo nie je internet" else null,
                         if (route.live) "Podľa živej premávky (TomTom)" else null,
                         Settings.routeOptions.label.ifBlank { null }?.replaceFirstChar { it.uppercase() },
                         nav.destinationWeather?.let { "Počasie v cieli ${it.label}" },
@@ -893,6 +1020,9 @@ class MainActivity : Activity() {
                 renderNavBar()
             }
         }
+        // Kým sa trasa počíta, tlačidlo je viditeľne neaktívne.
+        primaryButton.alpha = if (primaryButton.isEnabled) 1f else 0.45f
+        travelModeButton.setImageResource(if (nav.travelMode == TravelMode.FOOT) R.drawable.ic_walk else R.drawable.ic_car)
         navMap?.update()
         hud.invalidate()
         updateViewport()

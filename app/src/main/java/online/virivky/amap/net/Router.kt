@@ -15,7 +15,7 @@ import kotlin.math.roundToInt
 
 /**
  * Výpočet trasy autom. S kľúčom TomTom podľa živej premávky, inak (alebo pri chybe)
- * cez verejný OSRM server s dátami OpenStreetMap.
+ * cez verejný OSRM server s dátami OpenStreetMap. Pešo po chodníkoch alebo priamo ([walk]).
  */
 object Router {
     /** Posledná chyba TomTom (na zobrazenie v nastaveniach). */
@@ -77,6 +77,49 @@ object Router {
         }
         return parseAll(JSONObject(Http.getString(url.toString())))
     }
+
+    /**
+     * Pešia trasa po chodníkoch a lesných cestách (OSRM s pešími pravidlami na serveri FOSSGIS).
+     * Ak miesto nie je pri chodníku, posledný kúsok vedie priamo k nemu; bez siete či cesty celá priamo.
+     */
+    fun walk(from: GeoPoint, to: GeoPoint): Route {
+        val url = "https://routing.openstreetmap.de/routed-foot/route/v1/driving/" +
+            "${from.lon},${from.lat};${to.lon},${to.lat}?overview=full&steps=true&geometries=polyline6"
+        val route = try {
+            parseAll(JSONObject(Http.getString(url))).first()
+        } catch (e: Exception) {
+            return direct(from, to)
+        }
+        val end = route.points.last()
+        val rest = Geo.distance(end, to)
+        if (rest < 10) return route
+        // Do cieľa mimo chodníka priamo: posledný bod trasy je samotné miesto.
+        val points = route.points + to
+        val steps = route.steps.toMutableList()
+        val arrive = steps.removeAt(steps.size - 1)
+        if (steps.isNotEmpty()) {
+            val last = steps.removeAt(steps.size - 1)
+            steps.add(last.with(last.distance + rest, last.duration + rest / WALK_SPEED))
+        }
+        steps.add(
+            RouteStep(arrive.type, arrive.modifier, arrive.exit, arrive.name, arrive.ref, arrive.destinations, 0.0, 0.0, to, points.size - 1)
+        )
+        return Route(points, steps, route.duration + rest / WALK_SPEED)
+    }
+
+    /** Priamo vzdušnou čiarou: smer a vzdialenosť k miestu (napr. v lese bez internetu). */
+    fun direct(from: GeoPoint, to: GeoPoint): Route {
+        val distance = Geo.distance(from, to)
+        val seconds = distance / WALK_SPEED
+        val steps = listOf(
+            RouteStep("depart", null, null, "", "", "", distance, seconds, from, 0),
+            RouteStep("arrive", null, null, "", "", "", 0.0, 0.0, to, 1),
+        )
+        return Route(listOf(from, to), steps, seconds, direct = true)
+    }
+
+    /** Rýchlosť chôdze v teréne (m/s). */
+    private const val WALK_SPEED = 1.2
 
     fun parse(json: JSONObject): Route = parseAll(json).first()
 

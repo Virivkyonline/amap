@@ -70,6 +70,8 @@ class Route(
     val trafficDelay: Double = 0.0,
     /** Trasa vypočítaná podľa živej premávky (TomTom). */
     val live: Boolean = false,
+    /** Priamo vzdušnou čiarou (pešo bez chodníka či bez internetu) – len smer a vzdialenosť. */
+    val direct: Boolean = false,
 ) {
     private val cumulative = DoubleArray(points.size)
     val distance: Double

@@ -30,6 +30,8 @@ object MapIcons {
             "compass" to canvas(130f, 130f) { w, h -> compass(this, w, h) },
             "pin" to canvas(34f, 44f) { w, h -> pin(this, w, h, 0xFFE5333A.toInt()) },
             "pin-via" to canvas(28f, 36f) { w, h -> pin(this, w, h, 0xFFF08A00.toInt()) },
+            "pin-saved" to canvas(30f, 40f) { w, h -> savedPin(this, w, h) },
+            "walker" to canvas(64f, 64f) { w, h -> walker(this, w, h) },
             "camera" to canvas(26f, 26f) { w, h -> camera(this, w, h) },
             "signal" to canvas(16f, 34f) { w, h -> signal(this, w, h) },
         ) + PoiCategory.entries.associate { category ->
@@ -92,6 +94,48 @@ object MapIcons {
         }
         c.drawPath(path, fill)
         c.drawPath(path, stroke)
+    }
+
+    /** Moje miesto: jantárový špendlík s bielou hviezdičkou. */
+    private fun savedPin(c: Canvas, w: Float, h: Float) {
+        val amber = 0xFFF2A100.toInt()
+        pin(c, w, h, amber)
+        val cx = w / 2
+        val cy = w * 0.42f + 1f
+        // Bielu bodku špendlíka nahradí biela hviezdička.
+        c.drawCircle(cx, cy, w * 0.2f, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = amber })
+        val outer = w * 0.27f
+        val star = Path()
+        for (i in 0 until 10) {
+            val r = if (i % 2 == 0) outer else outer * 0.45f
+            val a = Math.toRadians(-90.0 + i * 36)
+            val x = cx + (r * kotlin.math.cos(a)).toFloat()
+            val y = cy + (r * kotlin.math.sin(a)).toFloat()
+            if (i == 0) star.moveTo(x, y) else star.lineTo(x, y)
+        }
+        star.close()
+        c.drawPath(star, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE })
+    }
+
+    /** Chodec: modrá bodka s kužeľom v smere chôdze (hore). */
+    private fun walker(c: Canvas, w: Float, h: Float) {
+        val cx = w / 2
+        val cy = h / 2
+        val cone = Path()
+        cone.moveTo(cx, cy)
+        cone.lineTo(cx - w * 0.3f, cy - h * 0.46f)
+        cone.quadTo(cx, cy - h * 0.56f, cx + w * 0.3f, cy - h * 0.46f)
+        cone.close()
+        c.drawPath(cone, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            shader = RadialGradient(cx, cy, h * 0.5f, Color.argb(0xAA, 0x3F, 0x80, 0xFF), Color.argb(0x00, 0x3F, 0x80, 0xFF), Shader.TileMode.CLAMP)
+        })
+        val p = Paint(Paint.ANTI_ALIAS_FLAG)
+        p.color = Color.argb(0x55, 0, 0, 0)
+        c.drawCircle(cx, cy + 1f, w * 0.17f, p)
+        p.color = Color.WHITE
+        c.drawCircle(cx, cy, w * 0.16f, p)
+        p.color = BLUE
+        c.drawCircle(cx, cy, w * 0.11f, p)
     }
 
     /** Modrá bodka pre polohu bez známeho smeru. */

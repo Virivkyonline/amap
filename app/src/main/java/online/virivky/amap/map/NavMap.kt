@@ -7,6 +7,8 @@ import android.graphics.RectF
 import android.os.SystemClock
 import android.view.Choreographer
 import online.virivky.amap.data.Crossings
+import online.virivky.amap.data.SavedPlaces
+import online.virivky.amap.data.TravelMode
 import online.virivky.amap.data.MapTheme
 import online.virivky.amap.data.MapPerspective
 import online.virivky.amap.data.Place
@@ -83,6 +85,7 @@ class NavMap(
     private var shownIncidents: Any? = null
     private var shownLanes = ""
     private var shownCrossings = ""
+    private var shownSaved: Any? = null
     private var shownSelected: Route? = null
     private var trafficKey = Settings.trafficLayerKey
     private var vehicle = Settings.vehicleModel to Settings.vehicleColor
@@ -94,7 +97,6 @@ class NavMap(
     /** Vzhľad polohy: "car" alebo "dot", a či ukazovať kompas. */
     private var meIcon = "dot"
     private var meCompass = false
-    private var meDestination: GeoPoint? = null
     /** Kamera počas sledovania: cieľové a aktuálne (plynulo sa približujúce) priblíženie a náklon. */
     private var navTilt = 0.0
     private var freeZoom = 15.0
@@ -157,6 +159,8 @@ class NavMap(
         }
     }
 
+    private val savedListener = SavedPlaces.Listener { update() }
+
     // Nové priechody: pri pohľade na pruhy prepočítať aj pruhy (priechody cez ne).
     private val crossingsListener = Crossings.Listener { if (shownLanes.isNotEmpty()) update() else updateCrossings() }
 
@@ -176,6 +180,7 @@ class NavMap(
         } ?: map.moveCamera(CameraUpdateFactory.newLatLngZoom(LatLng(48.1486, 17.1077), 12.0))
         Settings.addListener(settingsListener)
         Crossings.addListener(crossingsListener)
+        SavedPlaces.addListener(savedListener)
         // Dopravné udalosti vo výreze mapy (mimo navigácie; počas jazdy tie na trase).
         map.addOnCameraIdleListener {
             // Pri sledovaní auta sa kamera posúva po snímkach – stačí raz za pol sekundy.
@@ -200,6 +205,7 @@ class NavMap(
         framing = false
         Settings.removeListener(settingsListener)
         Crossings.removeListener(crossingsListener)
+        SavedPlaces.removeListener(savedListener)
     }
 
     private fun loadStyle() {
@@ -221,6 +227,7 @@ class NavMap(
             shownIncidents = null
             shownLanes = ""
             shownCrossings = ""
+            shownSaved = null
             update()
         }
     }
@@ -342,9 +349,12 @@ class NavMap(
         val heading = (if (nav.estimating) snapped?.segmentBearing ?: LocationTracker.heading
         else LocationTracker.heading ?: snapped?.segmentBearing)?.toDouble()
         val target = snapped?.snapped ?: location?.let { GeoPoint(it) }
-        meIcon = if (heading != null || navigating) "car" else "dot"
+        meIcon = when {
+            navigating && nav.travelMode == TravelMode.FOOT -> "walker"
+            heading != null || navigating -> "car"
+            else -> "dot"
+        }
         meCompass = navigating
-        meDestination = if (navigating) nav.destination?.point else null
         if (target == null) {
             s.getSourceAs<GeoJsonSource>("me")?.setGeoJson(EMPTY)
         } else if (motion.moveTo(SystemClock.uptimeMillis(), target, heading, if (snapped != null) route else null, snapped?.traveled)) {
@@ -481,6 +491,17 @@ class NavMap(
                 }]}"""
             )
             shownIncidents = incidentSource
+        }
+
+        // Moje miesta (hviezdičky s názvom).
+        val saved = SavedPlaces.all
+        if (saved !== shownSaved) {
+            s.getSourceAs<GeoJsonSource>("saved")?.setGeoJson(
+                """{"type":"FeatureCollection","features":[${
+                    saved.joinToString(",") { point(it.point, """"name":${JSONObject.quote(it.name)},"id":${it.id}""") }
+                }]}"""
+            )
+            shownSaved = saved
         }
 
         val stops = nav.stops
@@ -645,6 +666,20 @@ class NavMap(
         return best
     }
 
+    /** Moje miesto pod bodom obrazovky. */
+    fun savedAt(x: Float, y: Float): SavedPlaces.Saved? {
+        val r = 18 * context.resources.displayMetrics.density
+        val features = map.queryRenderedFeatures(RectF(x - r, y - r, x + r, y + r), "saved")
+        val id = features.firstOrNull()?.getNumberProperty("id")?.toLong() ?: return null
+        return SavedPlaces.all.firstOrNull { it.id == id }
+    }
+
+    /** Ukáže bod na mape (prestane sledovať polohu). */
+    fun showPoint(p: GeoPoint) {
+        setFollow(false)
+        map.easeCamera(CameraUpdateFactory.newLatLngZoom(LatLng(p.lat, p.lon), 16.5), 600)
+    }
+
     /** Služba pod bodom obrazovky (napr. po ťuknutí na mapu). */
     fun poiAt(x: Float, y: Float): Poi? {
         val r = 14 * context.resources.displayMetrics.density
@@ -719,10 +754,13 @@ class NavMap(
                 }
                 // Pri pohľade na pruhy bližšie, aby boli pruhy dobre vidieť.
                 if (shownLanes.isNotEmpty()) zoom = max(zoom, 18.9)
+                // Pešo trochu ďalej, nech je vidieť okolité chodníky.
+                if (NavigationController.travelMode == TravelMode.FOOT) zoom = 17.6
                 navZoom = zoom
             }
             navTilt = if (Settings.mapPerspective == MapPerspective.THREE_D) {
-                (52 + (speed - 30).coerceAtLeast(0.0) * 0.1).coerceIn(52.0, 60.0)
+                if (NavigationController.travelMode == TravelMode.FOOT) 35.0
+                else (52 + (speed - 30).coerceAtLeast(0.0) * 0.1).coerceIn(52.0, 60.0)
             } else {
                 0.0
             }
@@ -840,16 +878,12 @@ class NavMap(
         return builder.build()
     }
 
-    /** Auto (či bodka) na zobrazenej polohe a čiara k cieľu. */
+    /** Auto (či bodka) na zobrazenej polohe. */
     private fun drawMe() {
         val s = style ?: return
         val me = motion.point ?: return
         s.getSourceAs<GeoJsonSource>("me")?.setGeoJson(
             point(me, """"bearing":${motion.bearing ?: 0.0},"icon":"$meIcon","compass":${if (meCompass) 1 else 0}""")
-        )
-        val destination = meDestination
-        s.getSourceAs<GeoJsonSource>("destination-line")?.setGeoJson(
-            if (destination != null) lineString(listOf(me, destination)) else EMPTY
         )
     }
 
