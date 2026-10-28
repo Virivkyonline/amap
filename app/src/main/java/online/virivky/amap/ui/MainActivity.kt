@@ -49,6 +49,7 @@ import online.virivky.amap.data.SearchOptions
 import online.virivky.amap.data.SearchSort
 import online.virivky.amap.data.Services
 import online.virivky.amap.data.Settings
+import online.virivky.amap.data.TrafficEvents
 import online.virivky.amap.geo.GeoPoint
 import online.virivky.amap.location.LocationTracker
 import online.virivky.amap.map.DriveHud
@@ -139,6 +140,10 @@ class MainActivity : Activity() {
         // Obsadenosť nabíjačiek sa mení v tých istých položkách.
         poiAdapter.notifyDataSetChanged()
         render()
+    }
+    private val trafficListener = TrafficEvents.Listener {
+        navMap?.update()
+        hud.invalidate()
     }
     private val locationListener: (Location) -> Unit = {
         navMap?.update()
@@ -286,6 +291,7 @@ class MainActivity : Activity() {
         LocationTracker.addListener(locationListener)
         nav.addListener(navigationListener)
         Services.addListener(servicesListener)
+        TrafficEvents.addListener(trafficListener)
         render()
     }
 
@@ -302,6 +308,7 @@ class MainActivity : Activity() {
     override fun onStop() {
         nav.removeListener(navigationListener)
         Services.removeListener(servicesListener)
+        TrafficEvents.removeListener(trafficListener)
         LocationTracker.removeListener(locationListener)
         LocationTracker.release(this)
         mapView.onStop()

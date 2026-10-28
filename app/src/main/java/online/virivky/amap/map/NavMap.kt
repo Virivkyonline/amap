@@ -7,6 +7,7 @@ import android.graphics.RectF
 import online.virivky.amap.data.Poi
 import online.virivky.amap.data.Services
 import online.virivky.amap.data.Settings
+import online.virivky.amap.data.TrafficEvents
 import online.virivky.amap.geo.Geo
 import online.virivky.amap.geo.GeoPoint
 import online.virivky.amap.location.LocationTracker
@@ -14,6 +15,8 @@ import online.virivky.amap.nav.Instructions
 import online.virivky.amap.nav.NavigationController
 import online.virivky.amap.nav.NavigationController.Phase
 import online.virivky.amap.nav.Route
+import online.virivky.amap.net.Incident
+import online.virivky.amap.net.RouteIncident
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
@@ -54,6 +57,7 @@ class NavMap(private val context: Context, val map: MapLibreMap, dark: Boolean) 
     private var shownPois: List<Poi>? = null
     private var fittedPois: List<Poi>? = null
     private var shownAlternatives: List<Route>? = null
+    private var shownIncidents: Any? = null
     private var shownSelected: Route? = null
     private var trafficKey = Settings.trafficLayerKey
     private val settingsListener: () -> Unit = {
@@ -79,6 +83,13 @@ class NavMap(private val context: Context, val map: MapLibreMap, dark: Boolean) 
             map.moveCamera(CameraUpdateFactory.newLatLngZoom(LatLng(it.latitude, it.longitude), 15.0))
         } ?: map.moveCamera(CameraUpdateFactory.newLatLngZoom(LatLng(48.1486, 17.1077), 12.0))
         Settings.addListener(settingsListener)
+        // Dopravné udalosti vo výreze mapy (mimo navigácie; počas jazdy tie na trase).
+        map.addOnCameraIdleListener {
+            if (!isNavigating() && map.cameraPosition.zoom >= 9) {
+                val b = map.projection.visibleRegion.latLngBounds
+                TrafficEvents.requestArea(b.latitudeSouth, b.longitudeWest, b.latitudeNorth, b.longitudeEast)
+            }
+        }
         loadStyle()
     }
 
@@ -102,6 +113,7 @@ class NavMap(private val context: Context, val map: MapLibreMap, dark: Boolean) 
             shownVia = null
             shownPois = null
             shownAlternatives = null
+            shownIncidents = null
             update()
         }
     }
@@ -259,6 +271,32 @@ class NavMap(private val context: Context, val map: MapLibreMap, dark: Boolean) 
             )
             shownAlternatives = alternatives
             shownSelected = route
+        }
+
+        // Dopravné udalosti: počas jazdy na trase pred nami, inak vo výreze mapy.
+        val incidentSource: List<Any> = when {
+            Settings.trafficLayerKey == null -> emptyList()
+            navigating -> if (TrafficEvents.aheadRoute === route) TrafficEvents.ahead else emptyList()
+            else -> TrafficEvents.area
+        }
+        if (incidentSource !== shownIncidents) {
+            val incidents = incidentSource.map { if (it is RouteIncident) it.incident else it as Incident }
+            s.getSourceAs<GeoJsonSource>("incidents")?.setGeoJson(
+                if (incidents.isEmpty()) EMPTY
+                else """{"type":"FeatureCollection","features":[${
+                    incidents.joinToString(",") { point(it.points.first(), """"icon":"${it.icon}"""") }
+                }]}"""
+            )
+            val lines = incidents.filter { it.points.size >= 2 && it.category in setOf(7, 8, 9) }
+            s.getSourceAs<GeoJsonSource>("incident-lines")?.setGeoJson(
+                if (lines.isEmpty()) EMPTY
+                else """{"type":"FeatureCollection","features":[${
+                    lines.joinToString(",") {
+                        """{"type":"Feature","properties":{"closed":${if (it.category == 8) 1 else 0}},"geometry":{"type":"LineString","coordinates":[${it.points.joinToString(",") { p -> coord(p) }}]}}"""
+                    }
+                }]}"""
+            )
+            shownIncidents = incidentSource
         }
 
         val via = nav.via?.point

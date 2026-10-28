@@ -21,6 +21,8 @@ Vlastná navigácia pre Android, ktorá funguje aj v **Android Auto**.
 - radary na mape s hlasovým upozornením
 - **živá premávka (TomTom)**: farby premávky na cestách, trasa zafarbená podľa zápch,
   výpočet trasy a času príchodu podľa premávky, každých 5 minút hľadanie rýchlejšej trasy
+- **dopravné udalosti (TomTom)**: nehody, uzávierky, práce na ceste, zápchy a nebezpečenstvá
+  ako značky na mape; počas jazdy upozornenie na udalosť na trase (hlasom aj na obrazovke)
 - **služby na mape**: nabíjačky pre elektromobily (s kľúčom TomTom aj počet voľných
   nabíjacích bodov), pumpy, parkovanie, odpočívadlá, jedlo, káva, potraviny, ubytovanie,
   lekárne a bankomaty – v okolí, počas navigácie pozdĺž trasy
@@ -105,6 +107,7 @@ sa služby hľadajú v OpenStreetMap – nájdu sa tiež, len bez obsadenosti na
 | vyhľadávanie, adresa bodu | TomTom Search (s kľúčom), inak Nominatim (nominatim.openstreetmap.org) |
 | výpočet trasy, jazdné pruhy | TomTom (s kľúčom, podľa premávky), inak OSRM (router.project-osrm.org) |
 | farby premávky na cestách | TomTom Traffic Flow (s kľúčom) |
+| dopravné udalosti | TomTom Traffic Incidents (s kľúčom) |
 | služby, nabíjačky a ich obsadenosť | TomTom Search a EV Availability (s kľúčom), inak Overpass API |
 | rýchlostné limity, radary, semafory | Overpass API (overpass-api.de) |
 | hlas | prevod textu na reč v telefóne (slovenčina, inak čeština) |

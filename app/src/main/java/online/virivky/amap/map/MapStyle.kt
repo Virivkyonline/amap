@@ -328,6 +328,19 @@ object MapStyle {
                   "icon-allow-overlap":true,"icon-ignore-placement":true}}"""
             )
 
+            // Uzávierky a práce na ceste ako prerušovaná čiara, udalosti ako dopravné značky.
+            add(
+                """{"id":"incident-lines","type":"line","source":"incident-lines","minzoom":10,
+                "layout":{"line-cap":"butt","line-join":"round"},
+                "paint":{"line-color":["case",["==",["get","closed"],1],"#e5333a","#ffb300"],
+                  "line-dasharray":[1.5,1],"line-width":${linear(10 to 2, 14 to 4, 17 to 7)}}}"""
+            )
+            add(
+                """{"id":"incidents","type":"symbol","source":"incidents","minzoom":8,
+                "layout":{"icon-image":["get","icon"],"icon-allow-overlap":true,
+                  "icon-size":${linear(8 to 0.6, 12 to 0.85, 15 to 1)}}}"""
+            )
+
             // Čas jazdy pri variantoch trasy (vybraná zelenou).
             add(
                 """{"id":"route-labels","type":"symbol","source":"route-labels",
@@ -385,7 +398,8 @@ object MapStyle {
               "tiles":["https://api.tomtom.com/traffic/map/4/tile/flow/$style/{z}/{x}/{y}.png?key=$key&tileSize=512&thickness=8"]}"""
         }
         val sources = listOf(
-            "route", "alternatives", "route-labels", "arrow", "arrowhead", "cameras", "signals", "pois", "via",
+            "route", "alternatives", "route-labels", "incidents", "incident-lines", "arrow", "arrowhead", "cameras",
+            "signals", "pois", "via",
             "destination", "destination-line", "me",
         )
             .joinToString(",") { """"$it":{"type":"geojson","data":$EMPTY}""" } +

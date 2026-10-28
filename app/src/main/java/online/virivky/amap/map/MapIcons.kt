@@ -41,6 +41,8 @@ object MapIcons {
             "signal" to canvas(16f, 34f) { w, h -> signal(this, w, h) },
         ) + PoiCategory.entries.associate { category ->
             category.icon to canvas(30f, 38f) { w, h -> PoiIcons.marker(this, category, w, h) }
+        } + IncidentIcons.names.associateWith { name ->
+            canvas(30f, 30f) { w, h -> IncidentIcons.draw(this, name, w / 2, h / 2, w - 4f) }
         }
     }
 

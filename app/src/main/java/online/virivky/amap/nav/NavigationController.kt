@@ -6,9 +6,11 @@ import android.os.SystemClock
 import online.virivky.amap.data.Place
 import online.virivky.amap.data.Recents
 import online.virivky.amap.data.Settings
+import online.virivky.amap.data.TrafficEvents
 import online.virivky.amap.geo.Geo
 import online.virivky.amap.geo.GeoPoint
 import online.virivky.amap.location.LocationTracker
+import online.virivky.amap.net.Incident
 import online.virivky.amap.net.RoadData
 import online.virivky.amap.net.Router
 import online.virivky.amap.util.Bg
@@ -80,6 +82,12 @@ object NavigationController {
     var tunnelAhead: Tunnel? = null
         private set
     var tunnelDistance: Double? = null
+        private set
+
+    /** Najbližšia dopravná udalosť na trase (do 3 km) a vzdialenosť k nej. */
+    var incidentAhead: Incident? = null
+        private set
+    var incidentDistance: Double? = null
         private set
 
     /** Poloha sa odhaduje bez GPS (napr. v tuneli). */
@@ -247,6 +255,7 @@ object NavigationController {
             "."
         }
         if (phase == Phase.NAVIGATING) speak("Navigácia spustená$first")
+        TrafficEvents.refreshRoute(route, progress?.traveled ?: 0.0)
         notifyChanged()
     }
 
@@ -268,6 +277,7 @@ object NavigationController {
         estimating = false
         Bg.main.removeCallbacks(ticker)
         clearRoadInfo()
+        TrafficEvents.refreshRoute(null, 0.0)
         voice.stop()
         NavigationService.stop(app)
     }
@@ -280,6 +290,8 @@ object NavigationController {
         cameraDistance = null
         tunnelAhead = null
         tunnelDistance = null
+        incidentAhead = null
+        incidentDistance = null
     }
 
     /** Na pozadí dotiahne limity a radary pre novú trasu. */
@@ -333,9 +345,11 @@ object NavigationController {
                 if (phase == Phase.NAVIGATING) {
                     progress = null
                     LocationTracker.last?.let { updateProgress(it) }
+                    TrafficEvents.refreshRoute(newRoute, progress?.traveled ?: 0.0)
                     val saved = (remainingBefore ?: 0.0) - newRoute.duration
                     if (silent && remainingBefore != null && saved > max(120.0, remainingBefore * 0.1)) {
-                        speak("Našla sa rýchlejšia trasa, ušetríte ${(saved / 60).roundToInt()} minút.")
+                        val minutes = (saved / 60).roundToInt()
+                        speak("Našla sa rýchlejšia trasa, ušetríte $minutes ${if (minutes <= 4) "minúty" else "minút"}.")
                     }
                 } else {
                     phase = Phase.PREVIEW
@@ -437,6 +451,21 @@ object NavigationController {
         } else {
             tunnelAhead = null
             tunnelDistance = null
+        }
+
+        // Nehoda, uzávierka či práce na ceste pred nami (TomTom).
+        val incident = if (TrafficEvents.aheadRoute === r) TrafficEvents.ahead.firstOrNull { it.along > p.traveled - 30 } else null
+        val toIncident = incident?.let { it.along - p.traveled }
+        if (incident != null && toIncident != null && toIncident < 3000) {
+            incidentAhead = incident.incident
+            incidentDistance = max(0.0, toIncident)
+            val warnAt = max(1200.0, (speedMps ?: 0.0) * 50)
+            if (toIncident < warnAt && toIncident > 50 && announced.add("incident-${incident.incident.id}")) {
+                speak("Pozor, o ${Instructions.spokenDistance(toIncident)} ${incident.incident.spoken}.", interrupt = false)
+            }
+        } else {
+            incidentAhead = null
+            incidentDistance = null
         }
 
         val camera = r.cameras.firstOrNull { it.along > p.traveled - 5 }

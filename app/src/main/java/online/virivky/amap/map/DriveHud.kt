@@ -15,6 +15,7 @@ import online.virivky.amap.nav.Instructions
 import online.virivky.amap.nav.NavigationController
 import online.virivky.amap.nav.NavigationController.Phase
 import online.virivky.amap.nav.Route
+import online.virivky.amap.net.Incident
 import kotlin.math.roundToInt
 
 /**
@@ -55,7 +56,15 @@ class DriveHud @JvmOverloads constructor(context: Context, attrs: AttributeSet? 
         if (speed != null || navigating) {
             y += drawSpeed(canvas, x, y, speed, navigating && nav.overSpeed) + 10 * dp
         }
-        nav.cameraDistance?.takeIf { navigating }?.let { drawCamera(canvas, x, y, it) }
+        nav.cameraDistance?.takeIf { navigating }?.let {
+            drawCamera(canvas, x, y, it)
+            y += 48 * dp
+        }
+        val incident = nav.incidentAhead
+        val incidentDistance = nav.incidentDistance
+        if (navigating && incident != null && incidentDistance != null) {
+            drawIncident(canvas, x, y, incident, incidentDistance)
+        }
 
         if (navigating) {
             drawProgress(canvas, area, nav.progressFraction, nav.route)
@@ -116,6 +125,23 @@ class DriveHud @JvmOverloads constructor(context: Context, attrs: AttributeSet? 
         text.color = Color.WHITE
         text.textAlign = Paint.Align.LEFT
         canvas.drawText(label, x + 34 * dp, y + h / 2 + 6 * dp, text)
+        text.textAlign = Paint.Align.CENTER
+    }
+
+    /** Upozornenie na dopravnú udalosť (značka, druh a vzdialenosť). */
+    private fun drawIncident(canvas: Canvas, x: Float, y: Float, incident: Incident, distance: Double) {
+        val label = "${incident.label} · ${Instructions.displayDistance(distance)}"
+        text.typeface = bold
+        text.textSize = 17 * dp
+        val h = 40 * dp
+        val w = 46 * dp + text.measureText(label)
+        rect.set(x, y, x + w, y + h)
+        fill.color = Color.argb(0xF2, 0x10, 0x17, 0x27)
+        canvas.drawRoundRect(rect, h / 2, h / 2, fill)
+        IncidentIcons.draw(canvas, incident.icon, x + 22 * dp, y + h / 2, 26 * dp)
+        text.color = Color.WHITE
+        text.textAlign = Paint.Align.LEFT
+        canvas.drawText(label, x + 40 * dp, y + h / 2 + 6 * dp, text)
         text.textAlign = Paint.Align.CENTER
     }
 
