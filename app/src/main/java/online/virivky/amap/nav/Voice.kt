@@ -46,13 +46,15 @@ class Voice(context: Context) : TextToSpeech.OnInitListener {
         pending = null
     }
 
-    fun speak(text: String) {
+    /** [interrupt] = prerušiť práve hovorený pokyn; inak sa správa zaradí za neho. */
+    fun speak(text: String, interrupt: Boolean = true) {
         if (!ready) {
             pending = text
             return
         }
         audio.requestAudioFocus(focus)
-        tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "amap-${System.nanoTime()}")
+        val mode = if (interrupt) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD
+        tts.speak(text, mode, null, "amap-${System.nanoTime()}")
     }
 
     fun stop() {

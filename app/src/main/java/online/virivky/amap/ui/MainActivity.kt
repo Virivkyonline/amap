@@ -25,6 +25,7 @@ import online.virivky.amap.geo.GeoPoint
 import online.virivky.amap.location.LocationTracker
 import online.virivky.amap.map.TileCache
 import online.virivky.amap.nav.Instructions
+import online.virivky.amap.nav.LaneIcons
 import online.virivky.amap.nav.ManeuverIcons
 import online.virivky.amap.nav.NavigationController
 import online.virivky.amap.nav.NavigationController.Phase
@@ -46,6 +47,7 @@ class MainActivity : Activity() {
     private lateinit var maneuverDistance: TextView
     private lateinit var maneuverText: TextView
     private lateinit var maneuverRoad: TextView
+    private lateinit var lanesImage: ImageView
     private lateinit var bottomPanel: View
     private lateinit var panelTitle: TextView
     private lateinit var panelSubtitle: TextView
@@ -69,6 +71,7 @@ class MainActivity : Activity() {
         maneuverDistance = findViewById(R.id.maneuver_distance)
         maneuverText = findViewById(R.id.maneuver_text)
         maneuverRoad = findViewById(R.id.maneuver_road)
+        lanesImage = findViewById(R.id.lanes_image)
         bottomPanel = findViewById(R.id.bottom_panel)
         panelTitle = findViewById(R.id.panel_title)
         panelSubtitle = findViewById(R.id.panel_subtitle)
@@ -304,6 +307,7 @@ class MainActivity : Activity() {
     private fun renderInstruction() {
         val route = nav.route
         val p = nav.progress
+        lanesImage.visibility = View.GONE
         if (nav.phase == Phase.ARRIVED) {
             maneuverIcon.setImageResource(R.drawable.ic_place)
             maneuverDistance.text = "Cieľ"
@@ -323,5 +327,9 @@ class MainActivity : Activity() {
         maneuverDistance.text = Instructions.displayDistance(p.distanceToNextStep)
         maneuverText.text = Instructions.title(step)
         maneuverRoad.text = Instructions.road(step).orEmpty()
+        if (LaneIcons.useful(step.lanes) && p.distanceToNextStep < 1000) {
+            lanesImage.setImageBitmap(LaneIcons.bitmap(step.lanes, step.modifier))
+            lanesImage.visibility = View.VISIBLE
+        }
     }
 }

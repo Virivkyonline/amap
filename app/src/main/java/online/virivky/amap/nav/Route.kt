@@ -5,6 +5,12 @@ import online.virivky.amap.geo.GeoPoint
 import kotlin.math.max
 import kotlin.math.min
 
+/** Jazdný pruh pred manévrom: šípky na ceste a či je pruh vhodný pre trasu. */
+class LaneInfo(val indications: List<String>, val valid: Boolean)
+
+/** Radar na trase: poloha, vzdialenosť od začiatku trasy a prípadný limit. */
+class Camera(val point: GeoPoint, val along: Double, val limit: Int?)
+
 class RouteStep(
     /** Typ manévru z OSRM: turn, depart, arrive, roundabout, fork, ... */
     val type: String,
@@ -20,6 +26,7 @@ class RouteStep(
     val location: GeoPoint,
     /** Index bodu trasy, v ktorom sa manéver nachádza. */
     val startIndex: Int,
+    val lanes: List<LaneInfo> = emptyList(),
 )
 
 /** Aktuálny stav jazdy po trase. */
@@ -40,9 +47,19 @@ class Route(
     val points: List<GeoPoint>,
     val steps: List<RouteStep>,
     val duration: Double,
+    /** OSM id bodov trasy (rovnaký počet ako [points]), ak ich server poslal. */
+    val nodeIds: LongArray? = null,
 ) {
     private val cumulative = DoubleArray(points.size)
     val distance: Double
+
+    /** Rýchlostný limit v km/h pre každý úsek trasy (0 = neznámy). Dopĺňa sa dodatočne. */
+    @Volatile
+    var speedLimits: IntArray? = null
+
+    /** Radary pozdĺž trasy zoradené podľa vzdialenosti. Dopĺňajú sa dodatočne. */
+    @Volatile
+    var cameras: List<Camera> = emptyList()
 
     init {
         for (i in 1 until points.size) {
@@ -52,6 +69,20 @@ class Route(
     }
 
     private fun alongAt(step: RouteStep) = cumulative[step.startIndex.coerceIn(0, points.size - 1)]
+
+    /** Vzdialenosť od začiatku trasy k bodu, ak leží najviac [maxDistance] m od trasy. */
+    fun alongOf(p: GeoPoint, maxDistance: Double): Double? {
+        var best = maxDistance
+        var result: Double? = null
+        for (i in 0 until points.size - 1) {
+            val hit = Geo.pointToSegment(p, points[i], points[i + 1])
+            if (hit.distance <= best) {
+                best = hit.distance
+                result = cumulative[i] + (cumulative[i + 1] - cumulative[i]) * hit.t
+            }
+        }
+        return result
+    }
 
     /** Nájde polohu na trase. [hint] je úsek z minulej polohy, aby sme hľadali najprv okolo neho. */
     fun locate(p: GeoPoint, hint: Int): Progress {

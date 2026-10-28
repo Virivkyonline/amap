@@ -25,4 +25,24 @@ object Http {
     }
 
     fun getString(url: String) = String(get(url), Charsets.UTF_8)
+
+    /** POST formulára (application/x-www-form-urlencoded). */
+    fun post(url: String, form: String): String {
+        val connection = URL(url).openConnection() as HttpURLConnection
+        connection.requestMethod = "POST"
+        connection.doOutput = true
+        connection.connectTimeout = 15_000
+        connection.readTimeout = 90_000
+        connection.setRequestProperty("User-Agent", USER_AGENT)
+        connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
+        try {
+            connection.outputStream.use { it.write(form.toByteArray(Charsets.UTF_8)) }
+            val code = connection.responseCode
+            if (code !in 200..299) throw IOException("HTTP $code")
+            return connection.inputStream.use { String(it.readBytes(), Charsets.UTF_8) }
+        } catch (e: IOException) {
+            connection.disconnect()
+            throw e
+        }
+    }
 }

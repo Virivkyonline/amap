@@ -8,10 +8,12 @@ import online.virivky.amap.data.Recents
 import online.virivky.amap.geo.Geo
 import online.virivky.amap.geo.GeoPoint
 import online.virivky.amap.location.LocationTracker
+import online.virivky.amap.net.RoadData
 import online.virivky.amap.net.Router
 import online.virivky.amap.util.Bg
 import java.util.concurrent.CopyOnWriteArraySet
 import kotlin.math.max
+import kotlin.math.roundToInt
 
 /**
  * Spoločný stav navigácie pre telefón aj Android Auto.
@@ -29,8 +31,10 @@ object NavigationController {
     private val voice by lazy { Voice(app) }
     private val announced = HashSet<String>()
     private var request = 0
+    private var roadRequest = 0
     private var offRouteCount = 0
     private var lastRerouteAt = 0L
+    private var lastSpeedWarningAt = 0L
 
     var phase = Phase.IDLE
         private set
@@ -44,6 +48,27 @@ object NavigationController {
         private set
     var rerouting = false
         private set
+
+    /** Rýchlostný limit na aktuálnom úseku (km/h), ak je známy. */
+    var speedLimit: Int? = null
+        private set
+
+    /** Aktuálna rýchlosť v km/h. */
+    var speedKmh: Int? = null
+        private set
+
+    /** Najbližší radar vpredu (do 1,5 km) a vzdialenosť k nemu. */
+    var cameraAhead: Camera? = null
+        private set
+    var cameraDistance: Double? = null
+        private set
+
+    val overSpeed: Boolean
+        get() {
+            val limit = speedLimit ?: return false
+            val speed = speedKmh ?: return false
+            return speed > limit + max(3, limit / 10)
+        }
 
     var voiceEnabled: Boolean
         get() = app.getSharedPreferences("amap", Context.MODE_PRIVATE).getBoolean("voice", true)
@@ -131,8 +156,32 @@ object NavigationController {
         progress = null
         error = null
         rerouting = false
+        clearRoadInfo()
         voice.stop()
         NavigationService.stop(app)
+    }
+
+    private fun clearRoadInfo() {
+        roadRequest++
+        speedLimit = null
+        speedKmh = null
+        cameraAhead = null
+        cameraDistance = null
+    }
+
+    /** Na pozadí dotiahne limity a radary pre novú trasu. */
+    private fun loadRoadData(r: Route) {
+        val id = ++roadRequest
+        Bg.run({ RoadData.fetch(r) }) { result ->
+            if (id != roadRequest || route !== r) return@run
+            val data = result.getOrNull() ?: return@run
+            r.speedLimits = data.speedLimits
+            r.cameras = data.cameras
+            val location = LocationTracker.last
+            val p = progress
+            if (phase == Phase.NAVIGATING && location != null && p != null) updateRoadInfo(r, p, location)
+            notifyChanged()
+        }
     }
 
     private fun computeRoute(reroute: Boolean) {
@@ -153,6 +202,8 @@ object NavigationController {
             result.onSuccess { newRoute ->
                 route = newRoute
                 error = null
+                clearRoadInfo()
+                loadRoadData(newRoute)
                 if (phase == Phase.NAVIGATING) {
                     progress = null
                     announced.clear()
@@ -197,7 +248,34 @@ object NavigationController {
             computeRoute(reroute = true)
             return
         }
+        // Najprv pokyn na odbočenie, upozornenia na radar a rýchlosť sa zaradia za neho.
         if (!rerouting) announce(r, p, location)
+        updateRoadInfo(r, p, location)
+    }
+
+    private fun updateRoadInfo(r: Route, p: Progress, location: Location) {
+        speedKmh = if (location.hasSpeed()) (location.speed * 3.6f).roundToInt() else null
+        speedLimit = r.speedLimits?.getOrNull(p.segmentIndex)?.takeIf { it > 0 }
+
+        val camera = r.cameras.firstOrNull { it.along > p.traveled - 5 }
+        val distance = camera?.let { it.along - p.traveled }
+        if (camera != null && distance != null && distance < 1500) {
+            cameraAhead = camera
+            cameraDistance = max(0.0, distance)
+            val speed = if (location.hasSpeed()) location.speed.toDouble() else 0.0
+            if (distance < max(300.0, speed * 20) && announced.add("camera-${camera.along.roundToInt()}")) {
+                speak("Pozor, radar" + (camera.limit?.let { ", rýchlosť $it." } ?: "."), interrupt = false)
+            }
+        } else {
+            cameraAhead = null
+            cameraDistance = null
+        }
+
+        val now = SystemClock.elapsedRealtime()
+        if (overSpeed && now - lastSpeedWarningAt > 60_000) {
+            lastSpeedWarningAt = now
+            speak("Prekračujete rýchlosť.", interrupt = false)
+        }
     }
 
     private fun announce(r: Route, p: Progress, location: Location) {
@@ -220,7 +298,7 @@ object NavigationController {
         }
     }
 
-    private fun speak(text: String) {
-        if (voiceEnabled) voice.speak(text)
+    private fun speak(text: String, interrupt: Boolean = true) {
+        if (voiceEnabled) voice.speak(text, interrupt)
     }
 }

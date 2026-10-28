@@ -30,6 +30,11 @@ class MapFollower(private val renderer: MapRenderer) {
         renderer.route = route?.points
         renderer.routeStartIndex = 0
         renderer.routeHead = null
+        renderer.cameras = route?.cameras?.map { it.point } ?: emptyList()
+        renderer.speedLimit = if (navigating) nav.speedLimit else null
+        renderer.speedKmh = if (navigating) nav.speedKmh else null
+        renderer.overSpeed = navigating && nav.overSpeed
+        renderer.cameraDistance = if (navigating) nav.cameraDistance else null
 
         if (navigating) {
             if (!wasNavigating) {

@@ -54,6 +54,15 @@ class MapRenderer {
     var myHeading: Float? = null
     var myAccuracy = 0f
 
+    /** Radary na trase. */
+    var cameras: List<GeoPoint> = emptyList()
+
+    /** Údaje pre navigačný panel v rohu mapy (null = nezobrazovať). */
+    var speedLimit: Int? = null
+    var speedKmh: Int? = null
+    var overSpeed = false
+    var cameraDistance: Double? = null
+
     private var width = 0
     private var height = 0
 
@@ -123,11 +132,87 @@ class MapRenderer {
 
         val dp = pixelScale
         drawRoute(canvas, ax, ay, cx, cy, tileWorld, scale, dp)
+        for (camera in cameras) drawCamera(canvas, toScreen(camera, ax, ay, cx, cy, tileWorld, scale), dp)
         destination?.let { drawPin(canvas, toScreen(it, ax, ay, cx, cy, tileWorld, scale), dp) }
         myLocation?.let { drawMe(canvas, toScreen(it, ax, ay, cx, cy, tileWorld, scale), dp) }
         canvas.restore()
 
         drawAttribution(canvas, dp)
+        drawDriveInfo(canvas, dp)
+    }
+
+    private fun drawCamera(canvas: Canvas, s: FloatArray, dp: Float) {
+        val x = s[0]
+        val y = s[1]
+        canvas.save()
+        canvas.rotate(bearing, x, y)
+        val r = 9f * dp
+        fillPaint.color = Color.rgb(0xF5, 0x7C, 0x00)
+        canvas.drawRoundRect(x - r, y - r, x + r, y + r, 3f * dp, 3f * dp, fillPaint)
+        drawCameraGlyph(canvas, x, y, r * 0.75f)
+        canvas.restore()
+    }
+
+    /** Jednoduchá ikonka fotoaparátu (telo, objektív). */
+    private fun drawCameraGlyph(canvas: Canvas, x: Float, y: Float, r: Float) {
+        fillPaint.color = Color.WHITE
+        canvas.drawRoundRect(x - r, y - r * 0.6f, x + r, y + r * 0.7f, r * 0.2f, r * 0.2f, fillPaint)
+        canvas.drawRect(x - r * 0.35f, y - r * 0.85f, x + r * 0.35f, y - r * 0.5f, fillPaint)
+        fillPaint.color = Color.rgb(0xF5, 0x7C, 0x00)
+        canvas.drawCircle(x, y + r * 0.05f, r * 0.42f, fillPaint)
+    }
+
+    /** Rýchlostný limit, aktuálna rýchlosť a radar v ľavom dolnom rohu mapy. */
+    private fun drawDriveInfo(canvas: Canvas, dp: Float) {
+        val limit = speedLimit
+        val speed = speedKmh
+        val camera = cameraDistance
+        if (limit == null && speed == null && camera == null) return
+        val margin = 12f * dp
+        val r = 26f * dp
+        var x = (if (viewport.isEmpty) 0 else viewport.left) + margin
+        val bottom = (if (viewport.isEmpty) height else viewport.bottom) - margin - 14f * dp
+        val cy = bottom - r
+
+        if (limit != null) {
+            val cx = x + r
+            fillPaint.color = Color.WHITE
+            canvas.drawCircle(cx, cy, r, fillPaint)
+            strokePaint.color = Color.rgb(0xD9, 0x30, 0x25)
+            strokePaint.strokeWidth = r * 0.2f
+            canvas.drawCircle(cx, cy, r * 0.88f, strokePaint)
+            centeredText(canvas, limit.toString(), cx, cy, if (limit >= 100) r * 0.72f else r * 0.85f, Color.BLACK, true)
+            x += 2 * r + 8f * dp
+        }
+        if (speed != null) {
+            val w = 2.1f * r
+            fillPaint.color = if (overSpeed) Color.rgb(0xD9, 0x30, 0x25) else Color.argb(0xE6, 0x20, 0x21, 0x24)
+            canvas.drawRoundRect(x, cy - r, x + w, cy + r, 10f * dp, 10f * dp, fillPaint)
+            centeredText(canvas, speed.toString(), x + w / 2, cy - r * 0.18f, r * 0.85f, Color.WHITE, true)
+            centeredText(canvas, "km/h", x + w / 2, cy + r * 0.55f, r * 0.36f, Color.argb(0xCC, 0xFF, 0xFF, 0xFF), false)
+            x += w + 8f * dp
+        }
+        if (camera != null) {
+            val label = online.virivky.amap.nav.Instructions.displayDistance(camera)
+            textPaint.textSize = r * 0.55f
+            textPaint.isFakeBoldText = true
+            val w = 1.4f * r + textPaint.measureText(label) + 12f * dp
+            fillPaint.color = Color.rgb(0xF5, 0x7C, 0x00)
+            canvas.drawRoundRect(x, cy - r, x + w, cy + r, 10f * dp, 10f * dp, fillPaint)
+            drawCameraGlyph(canvas, x + 0.8f * r, cy, r * 0.42f)
+            textPaint.color = Color.WHITE
+            canvas.drawText(label, x + 1.4f * r, cy + textPaint.textSize * 0.36f, textPaint)
+            textPaint.isFakeBoldText = false
+        }
+    }
+
+    private fun centeredText(canvas: Canvas, text: String, cx: Float, cy: Float, size: Float, color: Int, bold: Boolean) {
+        textPaint.textSize = size
+        textPaint.color = color
+        textPaint.isFakeBoldText = bold
+        val w = textPaint.measureText(text)
+        canvas.drawText(text, cx - w / 2, cy + size * 0.36f, textPaint)
+        textPaint.isFakeBoldText = false
     }
 
     private fun drawTile(canvas: Canvas, z: Int, x: Int, y: Int) {

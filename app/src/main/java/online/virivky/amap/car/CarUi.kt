@@ -4,11 +4,14 @@ import androidx.annotation.DrawableRes
 import androidx.car.app.CarContext
 import androidx.car.app.model.CarIcon
 import androidx.car.app.model.Distance
+import androidx.car.app.navigation.model.Lane
+import androidx.car.app.navigation.model.LaneDirection
 import androidx.car.app.navigation.model.Maneuver
 import androidx.car.app.navigation.model.Step
 import androidx.car.app.navigation.model.TravelEstimate
 import androidx.core.graphics.drawable.IconCompat
 import online.virivky.amap.nav.Instructions
+import online.virivky.amap.nav.LaneIcons
 import online.virivky.amap.nav.ManeuverIcons
 import online.virivky.amap.nav.RouteStep
 import java.time.ZonedDateTime
@@ -41,7 +44,32 @@ object CarUi {
         maneuver.setIcon(CarIcon.Builder(IconCompat.createWithBitmap(ManeuverIcons.bitmap(step))).build())
         val builder = Step.Builder(Instructions.title(step)).setManeuver(maneuver.build())
         Instructions.road(step)?.let { builder.setRoad(it) }
+        if (LaneIcons.useful(step.lanes)) {
+            for (lane in step.lanes) {
+                val best = LaneIcons.recommended(lane, step.modifier)
+                val carLane = Lane.Builder()
+                lane.indications.map { if (it == "none") "straight" else it }.ifEmpty { listOf("straight") }.forEach { indication ->
+                    carLane.addDirection(LaneDirection.create(laneShape(indication), indication == best))
+                }
+                builder.addLane(carLane.build())
+            }
+            builder.setLanesImage(
+                CarIcon.Builder(IconCompat.createWithBitmap(LaneIcons.bitmap(step.lanes, step.modifier))).build()
+            )
+        }
         return builder.build()
+    }
+
+    private fun laneShape(indication: String): Int = when (indication) {
+        "straight", "none" -> LaneDirection.SHAPE_STRAIGHT
+        "slight left" -> LaneDirection.SHAPE_SLIGHT_LEFT
+        "left" -> LaneDirection.SHAPE_NORMAL_LEFT
+        "sharp left" -> LaneDirection.SHAPE_SHARP_LEFT
+        "slight right" -> LaneDirection.SHAPE_SLIGHT_RIGHT
+        "right" -> LaneDirection.SHAPE_NORMAL_RIGHT
+        "sharp right" -> LaneDirection.SHAPE_SHARP_RIGHT
+        "uturn" -> LaneDirection.SHAPE_U_TURN_LEFT
+        else -> LaneDirection.SHAPE_UNKNOWN
     }
 
     private fun maneuverType(step: RouteStep): Int {

@@ -13,7 +13,7 @@ import kotlin.math.sin
 object ManeuverIcons {
     private val cache = HashMap<String, Bitmap>()
 
-    private fun angle(modifier: String?): Float = when (modifier) {
+    fun angle(modifier: String?): Float = when (modifier) {
         "sharp right" -> 135f
         "right" -> 90f
         "slight right" -> 45f
@@ -105,7 +105,7 @@ object ManeuverIcons {
     }
 
     /** Hrot šípky na súradniciach (x, y) smerujúci pod uhlom [angle] (0 = hore). */
-    private fun arrowHead(canvas: Canvas, paint: Paint, x: Float, y: Float, angle: Float, s: Float) {
+    fun arrowHead(canvas: Canvas, paint: Paint, x: Float, y: Float, angle: Float, s: Float) {
         canvas.save()
         canvas.rotate(angle, x, y)
         val w = s * 0.17f
