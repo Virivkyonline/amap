@@ -32,6 +32,9 @@ object NavigationController {
 
     const val MAX_STOPS = 3
 
+    /** Najkratší čas medzi dvoma prepočtami trasy po zídení z nej. */
+    private const val REROUTE_MS = 6_000L
+
     fun interface Listener {
         fun onNavigationChanged()
     }
@@ -44,8 +47,6 @@ object NavigationController {
     private var roadRequest = 0
     private var offRouteCount = 0
     private var lastRerouteAt = 0L
-    /** Najkratší čas medzi prepočtami; pri opakovaných prepočtoch za sebou sa predlžuje. */
-    private var rerouteInterval = 10_000L
     private var lastSpeedWarningAt = 0L
     private var lastTrafficRefreshAt = 0L
 
@@ -78,6 +79,10 @@ object NavigationController {
     var error: String? = null
         private set
     var rerouting = false
+        private set
+
+    /** Auto je mimo trasy (pokyn trasy už neplatí, čoskoro príde nová trasa). */
+    var offRoute = false
         private set
 
     /** Rýchlostný limit na aktuálnom úseku (km/h), ak je známy. */
@@ -328,7 +333,7 @@ object NavigationController {
         phase = Phase.NAVIGATING
         announced.clear()
         offRouteCount = 0
-        rerouteInterval = 10_000L
+        offRoute = false
         progress = null
         NavigationService.start(app)
         lastFixAt = SystemClock.elapsedRealtime()
@@ -365,6 +370,7 @@ object NavigationController {
         progress = null
         error = null
         rerouting = false
+        offRoute = false
         estimating = false
         Bg.main.removeCallbacks(ticker)
         clearRoadInfo()
@@ -428,13 +434,13 @@ object NavigationController {
         val remainingBefore = progress?.remainingSeconds
         val heading = if (reroute) LocationTracker.heading else null
         val vias = stops.map { it.point }
-        // V náhľade aj iné varianty trasy na výber.
-        val alternatives = phase != Phase.NAVIGATING && vias.isEmpty()
+        // V náhľade aj iné varianty trasy na výber; pri prepočte za jazdy varianty na vyhnutie sa otáčaniu.
+        val alternatives = vias.isEmpty() && (phase != Phase.NAVIGATING || (reroute && !silent))
         Bg.run({ Router.routes(GeoPoint(here), target.point, heading, vias, alternatives) }) { result ->
             if (id != request) return@run
             rerouting = false
             result.onSuccess { found ->
-                val newRoute = found.first()
+                val newRoute = if (phase == Phase.NAVIGATING) forward(found) else found.first()
                 stopsPassed = 0
                 loadWeather(target, newRoute.duration)
                 route = newRoute
@@ -461,6 +467,19 @@ object NavigationController {
             }
             notifyChanged()
         }
+    }
+
+    /**
+     * Pri prepočte za jazdy trasa, ktorá nezačína otočením do protismeru (ako AMap: radšej okolo bloku),
+     * ak taký variant je a nie je oveľa pomalší.
+     */
+    private fun forward(found: List<Route>): Route {
+        val best = found.first()
+        fun turnsBack(r: Route) = r.steps.any { step ->
+            step.modifier == "uturn" && r.alongAtIndex(step.startIndex) < 500
+        }
+        if (!turnsBack(best)) return best
+        return found.drop(1).firstOrNull { !turnsBack(it) && it.duration < best.duration + 300 } ?: best
     }
 
     private fun onLocation(location: Location) {
@@ -516,9 +535,10 @@ object NavigationController {
         val joining = p.traveled < 50 && Geo.distance(here, r.points.first()) < 400
         offRouteCount = if (p.offRouteDistance > tolerance && moving && !joining) offRouteCount + 1 else 0
         val now = SystemClock.elapsedRealtime()
-        if (offRouteCount >= 3 && !rerouting && now - lastRerouteAt > rerouteInterval) {
-            // Viac prepočtov krátko po sebe = nová trasa nepomohla; ďalší skúsime neskôr.
-            rerouteInterval = if (now - lastRerouteAt < 60_000) min(rerouteInterval * 2, 120_000L) else 10_000L
+        offRoute = offRouteCount > 0
+        // Po zídení z trasy hneď nová trasa z miesta, kde auto je (počíta sa len za jazdy, takže
+        // na parkovisku sa neprepočítava dokola); ďalší prepočet najskôr o 6 s.
+        if (offRouteCount >= 3 && !rerouting && now - lastRerouteAt > REROUTE_MS) {
             lastRerouteAt = now
             offRouteCount = 0
             speak("Prepočítavam trasu.")

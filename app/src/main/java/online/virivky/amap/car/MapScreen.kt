@@ -48,6 +48,10 @@ class MapScreen(carContext: CarContext, private val map: CarMapSurface) : Screen
                 val p = nav.progress
                 if (route == null || p == null) {
                     builder.setNavigationInfo(RoutingInfo.Builder().setLoading(true).build())
+                } else if (nav.rerouting) {
+                    // Pokyn starej trasy neplatí – len správa, kým nepríde nová trasa.
+                    builder.setNavigationInfo(MessageInfo.Builder("Prepočítavam trasu…").build())
+                    builder.setDestinationTravelEstimate(CarUi.estimate(p.remainingDistance, p.remainingSeconds))
                 } else {
                     val step = route.steps[p.nextStepIndex]
                     // Karta s pokynom: zelená pri diaľničnom zjazde, inak čierna.

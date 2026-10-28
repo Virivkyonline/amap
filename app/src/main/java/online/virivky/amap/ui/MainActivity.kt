@@ -1078,6 +1078,15 @@ class MainActivity : Activity() {
             maneuverText.visibility = if (nav.estimating) View.VISIBLE else View.GONE
             return
         }
+        // Pri prepočte pokyn starej trasy neplatí (napr. „otočte sa“ za autom) – len stav.
+        if (nav.rerouting) {
+            maneuverIcon.setImageResource(R.drawable.ic_navigation)
+            maneuverDistance.text = ""
+            maneuverRoad.text = "Prepočítavam trasu…"
+            maneuverText.text = ""
+            maneuverText.visibility = View.GONE
+            return
+        }
         val step = route.steps[p.nextStepIndex]
         maneuverIcon.setImageBitmap(ManeuverIcons.bitmap(step))
         maneuverDistance.text = distanceText(p.distanceToNextStep)
@@ -1095,7 +1104,6 @@ class MainActivity : Activity() {
         maneuverText.visibility = if (maneuverText.text.isNullOrEmpty()) View.GONE else View.VISIBLE
         // Pokyn ostáva, stav len v doplnkovom riadku.
         val note = when {
-            nav.rerouting -> "Prepočítavam trasu…"
             p.traveled < 50 && p.offRouteDistance > 40 -> "Prejdite na vyznačenú trasu"
             else -> null
         }
