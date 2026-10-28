@@ -109,7 +109,7 @@ class AmapSession : Session() {
         val p = nav.progress
         try {
             val trip = Trip.Builder()
-            if (route == null || p == null || nav.rerouting) {
+            if (route == null || p == null) {
                 trip.setLoading(true)
             } else {
                 val step = route.steps[p.nextStepIndex]

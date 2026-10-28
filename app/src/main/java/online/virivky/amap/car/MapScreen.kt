@@ -42,7 +42,7 @@ class MapScreen(carContext: CarContext, private val map: CarMapSurface) : Screen
             Phase.NAVIGATING -> {
                 val route = nav.route
                 val p = nav.progress
-                if (route == null || p == null || nav.rerouting) {
+                if (route == null || p == null) {
                     builder.setNavigationInfo(RoutingInfo.Builder().setLoading(true).build())
                 } else {
                     val step = route.steps[p.nextStepIndex]

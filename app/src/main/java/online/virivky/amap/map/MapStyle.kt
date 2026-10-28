@@ -269,6 +269,13 @@ object MapStyle {
                 "paint":{"line-color":${trafficColor(c.route, "#f5c518", "#f2453d", "#9b1622")},
                   "line-width":${linear(5 to 2.5, 12 to 5.5, 15 to 10, 17 to 15, 18 to 21)}}}"""
             )
+            // Svetlé pruhy, ktoré plynú po trase v smere jazdy (mapa ich posúva, pozri NavMap).
+            add(
+                """{"id":"route-flow","type":"line","source":"route",
+                "layout":{"line-cap":"butt","line-join":"round"},
+                "paint":{"line-color":"#ffffff","line-opacity":0.38,"line-dasharray":[0,4,3],
+                  "line-width":${linear(5 to 1.2, 12 to 2.8, 15 to 5, 17 to 7.5, 18 to 10.5)}}}"""
+            )
             add(
                 """{"id":"route-glow","type":"line","source":"route-head",
                 "layout":{"line-cap":"round","line-join":"round"},

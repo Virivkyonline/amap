@@ -20,6 +20,7 @@ import online.virivky.amap.net.WeatherInfo
 import online.virivky.amap.util.Bg
 import java.util.concurrent.CopyOnWriteArraySet
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.roundToInt
 
 /**
@@ -43,6 +44,8 @@ object NavigationController {
     private var roadRequest = 0
     private var offRouteCount = 0
     private var lastRerouteAt = 0L
+    /** Najkratší čas medzi prepočtami; pri opakovaných prepočtoch za sebou sa predlžuje. */
+    private var rerouteInterval = 10_000L
     private var lastSpeedWarningAt = 0L
     private var lastTrafficRefreshAt = 0L
 
@@ -325,6 +328,7 @@ object NavigationController {
         phase = Phase.NAVIGATING
         announced.clear()
         offRouteCount = 0
+        rerouteInterval = 10_000L
         progress = null
         NavigationService.start(app)
         lastFixAt = SystemClock.elapsedRealtime()
@@ -505,10 +509,16 @@ object NavigationController {
             return
         }
 
+        // Zídenie z trasy: len keď auto ide (na parkovisku GPS „pláva“) a nie na začiatku,
+        // keď z parkoviska či dvora ešte len prichádzame na trasu.
         val tolerance = max(40.0, location.accuracy * 1.5)
-        offRouteCount = if (p.offRouteDistance > tolerance) offRouteCount + 1 else 0
+        val moving = (speedOf(location) ?: 0.0) >= 2.5
+        val joining = p.traveled < 50 && Geo.distance(here, r.points.first()) < 400
+        offRouteCount = if (p.offRouteDistance > tolerance && moving && !joining) offRouteCount + 1 else 0
         val now = SystemClock.elapsedRealtime()
-        if (offRouteCount >= 3 && !rerouting && now - lastRerouteAt > 10_000) {
+        if (offRouteCount >= 3 && !rerouting && now - lastRerouteAt > rerouteInterval) {
+            // Viac prepočtov krátko po sebe = nová trasa nepomohla; ďalší skúsime neskôr.
+            rerouteInterval = if (now - lastRerouteAt < 60_000) min(rerouteInterval * 2, 120_000L) else 10_000L
             lastRerouteAt = now
             offRouteCount = 0
             speak("Prepočítavam trasu.")

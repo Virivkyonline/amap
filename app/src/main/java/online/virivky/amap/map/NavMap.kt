@@ -26,7 +26,10 @@ import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.geometry.LatLngBounds
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.Style
+import org.maplibre.android.style.layers.LineLayer
+import org.maplibre.android.style.layers.PropertyFactory
 import org.maplibre.android.style.sources.GeoJsonSource
+import online.virivky.amap.util.Bg
 import online.virivky.amap.util.Sun
 import org.json.JSONObject
 import kotlin.math.ln
@@ -72,6 +75,39 @@ class NavMap(
     private var shownIncidents: Any? = null
     private var shownSelected: Route? = null
     private var trafficKey = Settings.trafficLayerKey
+
+    /** Plynutie trasy: posun prerušovanej čiary po krokoch (ako pohyblivá trasa v AMap). */
+    private var flowStep = 0
+    private var flowRunning = false
+    private var disposed = false
+
+    /** Vlastník mapy vypne animáciu, keď mapa nie je vidieť (aplikácia na pozadí). */
+    var flowEnabled = true
+        set(value) {
+            field = value
+            updateFlow()
+        }
+    private val flow = object : Runnable {
+        override fun run() {
+            val layer = style?.getLayerAs<LineLayer>("route-flow")
+            if (layer == null || !shouldFlow()) {
+                flowRunning = false
+                return
+            }
+            flowStep = (flowStep + 1) % FLOW.size
+            layer.setProperties(PropertyFactory.lineDasharray(FLOW[flowStep]))
+            Bg.main.postDelayed(this, FLOW_FRAME_MS)
+        }
+    }
+
+    private fun shouldFlow() = !disposed && flowEnabled && style != null && shownRoute != null
+
+    private fun updateFlow() {
+        if (shouldFlow() && !flowRunning) {
+            flowRunning = true
+            Bg.main.postDelayed(flow, FLOW_FRAME_MS)
+        }
+    }
     private val settingsListener: () -> Unit = {
         val key = Settings.trafficLayerKey
         val themeChanged = updateTheme(force = true)
@@ -112,6 +148,8 @@ class NavMap(
 
     /** Uvoľní mapu (prestane počúvať zmeny nastavení). */
     fun dispose() {
+        disposed = true
+        Bg.main.removeCallbacks(flow)
         Settings.removeListener(settingsListener)
     }
 
@@ -385,6 +423,7 @@ class NavMap(
 
         updateCamera(navigating, route, me, heading, animate)
         wasNavigating = navigating
+        updateFlow()
     }
 
     /** Variant trasy pod bodom obrazovky (index v [NavigationController.routes]). */
@@ -545,6 +584,15 @@ class NavMap(
 
     companion object {
         private const val EMPTY = """{"type":"FeatureCollection","features":[]}"""
+
+        /** Kroky posunu pruhov (v násobkoch hrúbky čiary): pruh 3, medzera 4, posun o pol jednotky. */
+        private val FLOW: Array<Array<Float>> = arrayOf(
+            arrayOf(0f, 4f, 3f), arrayOf(0.5f, 4f, 2.5f), arrayOf(1f, 4f, 2f), arrayOf(1.5f, 4f, 1.5f),
+            arrayOf(2f, 4f, 1f), arrayOf(2.5f, 4f, 0.5f), arrayOf(3f, 4f, 0f), arrayOf(0f, 0.5f, 3f, 3.5f),
+            arrayOf(0f, 1f, 3f, 3f), arrayOf(0f, 1.5f, 3f, 2.5f), arrayOf(0f, 2f, 3f, 2f), arrayOf(0f, 2.5f, 3f, 1.5f),
+            arrayOf(0f, 3f, 3f, 1f), arrayOf(0f, 3.5f, 3f, 0.5f),
+        )
+        private const val FLOW_FRAME_MS = 60L
 
         private fun round(v: Double) = Math.round(v * 1e7) / 1e7
 

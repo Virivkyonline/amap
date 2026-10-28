@@ -311,9 +311,11 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         mapView.onResume()
+        navMap?.flowEnabled = true
     }
 
     override fun onPause() {
+        navMap?.flowEnabled = false
         mapView.onPause()
         super.onPause()
     }
@@ -1039,7 +1041,7 @@ class MainActivity : Activity() {
             maneuverText.text = nav.destination?.name
             return
         }
-        if (route == null || p == null || nav.rerouting) {
+        if (route == null || p == null) {
             maneuverIcon.setImageDrawable(null)
             maneuverDistance.text = ""
             maneuverRoad.text = if (nav.rerouting) "Prepočítavam trasu…" else "Čakám na GPS…"
@@ -1076,6 +1078,16 @@ class MainActivity : Activity() {
         maneuverRoad.text = road ?: Instructions.title(step)
         maneuverText.text = if (road != null) Instructions.title(step) else ""
         maneuverText.visibility = if (maneuverText.text.isNullOrEmpty()) View.GONE else View.VISIBLE
+        // Pokyn ostáva, stav len v doplnkovom riadku.
+        val note = when {
+            nav.rerouting -> "Prepočítavam trasu…"
+            p.traveled < 50 && p.offRouteDistance > 40 -> "Prejdite na vyznačenú trasu"
+            else -> null
+        }
+        if (note != null) {
+            maneuverText.text = note
+            maneuverText.visibility = View.VISIBLE
+        }
         if (LaneIcons.useful(step.lanes) && p.distanceToNextStep < 1000) {
             lanesImage.setImageBitmap(LaneIcons.bitmap(step.lanes, step.modifier))
             lanesImage.visibility = View.VISIBLE
