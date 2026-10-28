@@ -42,6 +42,10 @@ object NavigationController {
         private set
     var destination: Place? = null
         private set
+
+    /** Zastávka pred cieľom (napr. nabíjačka), ak je pridaná. */
+    var via: Place? = null
+        private set
     var route: Route? = null
         private set
     var progress: Progress? = null
@@ -145,6 +149,7 @@ object NavigationController {
     fun preview(place: Place) {
         if (phase == Phase.NAVIGATING || phase == Phase.ARRIVED) stopInternal()
         destination = place
+        via = null
         route = null
         progress = null
         error = null
@@ -152,6 +157,29 @@ object NavigationController {
         Recents.add(place)
         notifyChanged()
         computeRoute(reroute = false)
+    }
+
+    /**
+     * Počas navigácie pridá zastávku (napr. nabíjačku) a trasa povedie cez ňu do pôvodného cieľa.
+     * Mimo navigácie len naplánuje trasu k miestu.
+     */
+    fun addStop(place: Place) {
+        if (phase != Phase.NAVIGATING) {
+            preview(place)
+            return
+        }
+        via = place
+        speak("Pridávam zastávku ${place.name}.")
+        computeRoute(reroute = true)
+        notifyChanged()
+    }
+
+    /** Zruší zastávku a trasa povedie priamo do cieľa. */
+    fun removeStop() {
+        if (via == null) return
+        via = null
+        if (phase == Phase.NAVIGATING) computeRoute(reroute = true)
+        notifyChanged()
     }
 
     fun retry() {
@@ -201,6 +229,7 @@ object NavigationController {
         request++
         phase = Phase.IDLE
         destination = null
+        via = null
         route = null
         progress = null
         error = null
@@ -257,7 +286,8 @@ object NavigationController {
         lastTrafficRefreshAt = SystemClock.elapsedRealtime()
         val remainingBefore = progress?.remainingSeconds
         val heading = if (reroute) LocationTracker.heading else null
-        Bg.run({ Router.route(GeoPoint(here), target.point, heading) }) { result ->
+        val stop = via?.point
+        Bg.run({ Router.route(GeoPoint(here), target.point, heading, stop) }) { result ->
             if (id != request) return@run
             rerouting = false
             result.onSuccess { newRoute ->
@@ -304,6 +334,15 @@ object NavigationController {
         val here = GeoPoint(location)
         val p = r.locate(here, progress?.segmentIndex ?: 0)
         progress = p
+
+        // Pri zastávke (alebo keď ju trasa už minula) pokračujeme rovno do cieľa.
+        via?.let { stop ->
+            val stopStep = r.steps.indexOfFirst { it.type == "waypoint" }
+            if (Geo.distance(here, stop.point) < 60 || (stopStep >= 0 && p.nextStepIndex > stopStep)) {
+                via = null
+                speak("Ste pri zastávke ${stop.name}.")
+            }
+        }
 
         if (p.remainingDistance < 25 || Geo.distance(here, r.points.last()) < 20) {
             phase = Phase.ARRIVED

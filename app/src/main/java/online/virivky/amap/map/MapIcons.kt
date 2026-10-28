@@ -11,6 +11,7 @@ import android.graphics.RadialGradient
 import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.Typeface
+import online.virivky.amap.data.PoiCategory
 
 /** Obrázky pre mapu (kreslené v kóde, veľkosti v dp). */
 object MapIcons {
@@ -34,10 +35,13 @@ object MapIcons {
             "car" to canvas(90f, 90f) { w, h -> car(this, w, h) },
             "dot" to canvas(28f, 28f) { w, h -> dot(this, w, h) },
             "compass" to canvas(130f, 130f) { w, h -> compass(this, w, h) },
-            "pin" to canvas(34f, 44f) { w, h -> pin(this, w, h) },
+            "pin" to canvas(34f, 44f) { w, h -> pin(this, w, h, 0xFFE5333A.toInt()) },
+            "pin-via" to canvas(28f, 36f) { w, h -> pin(this, w, h, 0xFFF08A00.toInt()) },
             "camera" to canvas(26f, 26f) { w, h -> camera(this, w, h) },
             "signal" to canvas(16f, 34f) { w, h -> signal(this, w, h) },
-        )
+        ) + PoiCategory.entries.associate { category ->
+            category.icon to canvas(30f, 38f) { w, h -> PoiIcons.marker(this, category, w, h) }
+        }
     }
 
     /** Šípka „>“ – pri umiestnení na čiare ukazuje v smere trasy. */
@@ -166,8 +170,8 @@ object MapIcons {
         }
     }
 
-    /** Červený špendlík cieľa (hrot dole v strede). */
-    private fun pin(c: Canvas, w: Float, h: Float) {
+    /** Špendlík cieľa či zastávky (hrot dole v strede). */
+    private fun pin(c: Canvas, w: Float, h: Float, color: Int) {
         val cx = w / 2
         val r = w * 0.42f
         val path = Path()
@@ -176,7 +180,7 @@ object MapIcons {
         path.lineTo(cx, h - 1f)
         path.lineTo(cx + r * 0.7f, r + 1f + r * 0.7f)
         path.close()
-        val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFE5333A.toInt() }
+        val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { this.color = color }
         c.drawPath(path, fill)
         val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.WHITE

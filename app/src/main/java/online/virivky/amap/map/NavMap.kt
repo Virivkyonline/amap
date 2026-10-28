@@ -3,6 +3,9 @@ package online.virivky.amap.map
 import android.content.Context
 import android.graphics.Point
 import android.graphics.Rect
+import android.graphics.RectF
+import online.virivky.amap.data.Poi
+import online.virivky.amap.data.Services
 import online.virivky.amap.data.Settings
 import online.virivky.amap.geo.Geo
 import online.virivky.amap.geo.GeoPoint
@@ -17,6 +20,7 @@ import org.maplibre.android.geometry.LatLngBounds
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.Style
 import org.maplibre.android.style.sources.GeoJsonSource
+import org.json.JSONObject
 import kotlin.math.ln
 
 /**
@@ -45,6 +49,9 @@ class NavMap(private val context: Context, val map: MapLibreMap, dark: Boolean) 
     private var shownCameras: Any? = null
     private var shownSignals: Any? = null
     private var shownDestination: GeoPoint? = null
+    private var shownVia: GeoPoint? = null
+    private var shownPois: List<Poi>? = null
+    private var fittedPois: List<Poi>? = null
     private var trafficKey = Settings.trafficLayerKey
     private val settingsListener: () -> Unit = {
         val key = Settings.trafficLayerKey
@@ -89,6 +96,8 @@ class NavMap(private val context: Context, val map: MapLibreMap, dark: Boolean) 
             shownCameras = null
             shownSignals = null
             shownDestination = null
+            shownVia = null
+            shownPois = null
             update()
         }
     }
@@ -111,6 +120,8 @@ class NavMap(private val context: Context, val map: MapLibreMap, dark: Boolean) 
         viewport.set(area)
         this.width = width
         this.height = height
+        // Panel so službami zmenil voľnú plochu – miesta znova vmestíme do nej.
+        if (!follow && fittedPois === Services.results) fittedPois = null
         update(animate = false)
     }
 
@@ -184,7 +195,7 @@ class NavMap(private val context: Context, val map: MapLibreMap, dark: Boolean) 
         // Šípka najbližšieho manévru.
         val step = if (navigating && route != null && progress != null) route.steps[progress.nextStepIndex] else null
         val showArrow = step != null && progress!!.distanceToNextStep < 1000 &&
-            step.type !in setOf("arrive", "depart") && !(step.modifier == "straight" && step.type != "roundabout")
+            step.type !in setOf("arrive", "depart", "waypoint") && !(step.modifier == "straight" && step.type != "roundabout")
         val arrowKey = if (showArrow) "${route.hashCode()}-${progress!!.nextStepIndex}" else ""
         if (arrowKey != shownArrowKey) {
             if (showArrow) {
@@ -220,6 +231,12 @@ class NavMap(private val context: Context, val map: MapLibreMap, dark: Boolean) 
             shownSignals = signals
         }
 
+        val via = nav.via?.point
+        if (via != shownVia) {
+            s.getSourceAs<GeoJsonSource>("via")?.setGeoJson(via?.let { point(it) } ?: EMPTY)
+            shownVia = via
+        }
+
         val destination = nav.destination?.point
         if (destination != shownDestination) {
             s.getSourceAs<GeoJsonSource>("destination")?.setGeoJson(destination?.let { point(it) } ?: EMPTY)
@@ -242,9 +259,62 @@ class NavMap(private val context: Context, val map: MapLibreMap, dark: Boolean) 
             )
         )
 
+        // Služby: mimo navigácie mapu priblížime na najbližšie nájdené miesta.
+        val pois = Services.results
+        if (pois !== shownPois) {
+            s.getSourceAs<GeoJsonSource>("pois")?.setGeoJson(poiFeatures(pois))
+            val hadPois = !shownPois.isNullOrEmpty()
+            shownPois = pois
+            if (pois.isEmpty() && hadPois && nav.phase == Phase.IDLE) setFollow(true)
+        }
+        if (pois.isNotEmpty() && pois !== fittedPois && !navigating && nav.phase == Phase.IDLE && width > 0 && height > 0) {
+            // Označiť vopred: fit() vypne sledovanie a to môže hneď znova zavolať update().
+            fittedPois = pois
+            fit(pois.take(12).map { it.point } + listOfNotNull(me))
+        }
+
         updateCamera(navigating, route, me, heading, animate)
         wasNavigating = navigating
     }
+
+    /** Služba pod bodom obrazovky (napr. po ťuknutí na mapu). */
+    fun poiAt(x: Float, y: Float): Poi? {
+        val r = 14 * context.resources.displayMetrics.density
+        val features = map.queryRenderedFeatures(RectF(x - r, y - r, x + r, y + r), "pois")
+        val index = features.firstOrNull()?.getNumberProperty("i")?.toInt() ?: return null
+        return Services.results.getOrNull(index)
+    }
+
+    /** Priblíži mapu tak, aby boli body vidieť vo voľnej ploche. */
+    private fun fit(points: List<GeoPoint>) {
+        if (width == 0 || height == 0 || points.isEmpty()) return
+        val area = if (viewport.isEmpty) Rect(0, 0, width, height) else viewport
+        val pad = (40 * context.resources.displayMetrics.density).toInt()
+        val bounds = LatLngBounds.Builder()
+        points.forEach { bounds.include(LatLng(it.lat, it.lon)) }
+        try {
+            map.easeCamera(
+                CameraUpdateFactory.newLatLngBounds(
+                    bounds.build(), 0.0, 0.0,
+                    area.left + pad, area.top + pad, width - area.right + pad, height - area.bottom + pad,
+                ),
+                600,
+            )
+        } catch (e: Exception) {
+            // Jediný bod nemá ohraničenie – len naň posunieme mapu.
+            val p = points.first()
+            map.easeCamera(CameraUpdateFactory.newLatLngZoom(LatLng(p.lat, p.lon), 15.0), 600)
+        }
+        setFollow(false)
+    }
+
+    private fun poiFeatures(pois: List<Poi>): String =
+        if (pois.isEmpty()) EMPTY
+        else """{"type":"FeatureCollection","features":[${
+            pois.mapIndexed { i, poi ->
+                point(poi.point, """"icon":"${poi.category.icon}","name":${JSONObject.quote(poi.name)},"rank":$i,"i":$i""")
+            }.joinToString(",")
+        }]}"""
 
     private fun updateCamera(navigating: Boolean, route: Route?, me: GeoPoint?, heading: Float?, animate: Boolean) {
         if (width == 0 || height == 0) return
@@ -256,23 +326,8 @@ class NavMap(private val context: Context, val map: MapLibreMap, dark: Boolean) 
         val area = if (viewport.isEmpty) Rect(0, 0, width, height) else viewport
 
         if (!navigating && NavigationController.phase == Phase.PREVIEW && route != null && route !== fittedRoute) {
-            val bounds = LatLngBounds.Builder()
-            route.points.forEach { bounds.include(LatLng(it.lat, it.lon)) }
-            me?.let { bounds.include(LatLng(it.lat, it.lon)) }
-            val pad = (40 * context.resources.displayMetrics.density).toInt()
-            try {
-                map.easeCamera(
-                    CameraUpdateFactory.newLatLngBounds(
-                        bounds.build(), 0.0, 0.0,
-                        area.left + pad, area.top + pad, width - area.right + pad, height - area.bottom + pad,
-                    ),
-                    600,
-                )
-                fittedRoute = route
-                setFollow(false)
-            } catch (e: Exception) {
-                // Trasa s jedným bodom nemá ohraničenie.
-            }
+            fittedRoute = route
+            fit(route.points + listOfNotNull(me))
             return
         }
         if (NavigationController.phase == Phase.IDLE) fittedRoute = null

@@ -34,6 +34,7 @@ object Instructions {
         return when (step.type) {
             "depart" -> "Vyrazte"
             "arrive" -> side(m)?.let { "Cieľ je $it" } ?: "Cieľ"
+            "waypoint" -> side(m)?.let { "Zastávka je $it" } ?: "Zastávka"
             "roundabout", "rotary" ->
                 step.exit?.takeIf { it > 0 }?.let { "Na kruhovom objazde použite $it. výjazd" }
                     ?: "Vojdite na kruhový objazd"
@@ -58,9 +59,11 @@ object Instructions {
     }
 
     /** Pokyn do hlasovej navigácie (malým písmenom, aby sa dal spojiť so vzdialenosťou). */
-    fun phrase(step: RouteStep): String =
-        if (step.type == "arrive") "budete v cieli"
-        else title(step).replaceFirstChar { it.lowercase(SK) }
+    fun phrase(step: RouteStep): String = when (step.type) {
+        "arrive" -> "budete v cieli"
+        "waypoint" -> "budete pri zastávke"
+        else -> title(step).replaceFirstChar { it.lowercase(SK) }
+    }
 
     /** Manéver na diaľnici alebo rýchlostnej ceste (zjazd, nájazd, rozdvojenie s tabuľou). */
     fun isHighway(step: RouteStep) =

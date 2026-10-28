@@ -11,6 +11,7 @@ import androidx.car.app.AppManager
 import androidx.car.app.CarContext
 import androidx.car.app.SurfaceCallback
 import androidx.car.app.SurfaceContainer
+import online.virivky.amap.data.Services
 import online.virivky.amap.location.LocationTracker
 import online.virivky.amap.map.DriveHud
 import online.virivky.amap.map.NavMap
@@ -34,17 +35,20 @@ class CarMapSurface(private val carContext: CarContext) : SurfaceCallback {
     private var dark = carContext.isDarkMode
 
     private val navigationListener = NavigationController.Listener { refresh() }
+    private val servicesListener = Services.Listener { refresh() }
     private val locationListener: (Location) -> Unit = { refresh() }
 
     fun attach() {
         dark = carContext.isDarkMode
         carContext.getCarService(AppManager::class.java).setSurfaceCallback(this)
         NavigationController.addListener(navigationListener)
+        Services.addListener(servicesListener)
         LocationTracker.addListener(locationListener)
     }
 
     fun detach() {
         NavigationController.removeListener(navigationListener)
+        Services.removeListener(servicesListener)
         LocationTracker.removeListener(locationListener)
         release()
     }

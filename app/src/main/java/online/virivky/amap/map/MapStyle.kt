@@ -314,7 +314,17 @@ object MapStyle {
                   "icon-allow-overlap":true,"icon-ignore-placement":true}}"""
             )
 
-            // Značky: semafory, radary, cieľ, moja poloha (kompas + auto).
+            // Služby (nabíjačky, pumpy, …); názvy až pri väčšom priblížení.
+            add(
+                """{"id":"pois","type":"symbol","source":"pois",
+                "layout":{"icon-image":["get","icon"],"icon-anchor":"bottom","icon-allow-overlap":true,
+                  "icon-size":${linear(9 to 0.7, 14 to 0.9, 17 to 1)},"symbol-sort-key":["get","rank"],
+                  "text-field":["step",["zoom"],"",14,["get","name"]],"text-font":["Noto Sans Regular"],
+                  "text-size":12,"text-anchor":"top","text-offset":[0,0.2],"text-max-width":9,"text-optional":true},
+                "paint":{"text-color":"${c.roadLabel}","text-halo-color":"${c.halo}","text-halo-width":1.4}}"""
+            )
+
+            // Značky: semafory, radary, zastávka, cieľ, moja poloha (kompas + auto).
             add(
                 """{"id":"signals","type":"symbol","source":"signals","minzoom":14,
                 "layout":{"icon-image":"signal","icon-anchor":"bottom","icon-size":${linear(14 to 0.7, 17 to 1)},
@@ -323,6 +333,10 @@ object MapStyle {
             add(
                 """{"id":"cameras","type":"symbol","source":"cameras","minzoom":11,
                 "layout":{"icon-image":"camera","icon-allow-overlap":true,"icon-ignore-placement":true}}"""
+            )
+            add(
+                """{"id":"via","type":"symbol","source":"via",
+                "layout":{"icon-image":"pin-via","icon-anchor":"bottom","icon-allow-overlap":true,"icon-ignore-placement":true}}"""
             )
             add(
                 """{"id":"destination","type":"symbol","source":"destination",
@@ -346,7 +360,7 @@ object MapStyle {
             ""","traffic":{"type":"raster","tileSize":256,"minzoom":5,"maxzoom":22,"attribution":"© TomTom",
               "tiles":["https://api.tomtom.com/traffic/map/4/tile/flow/$style/{z}/{x}/{y}.png?key=$key&tileSize=512&thickness=8"]}"""
         }
-        val sources = listOf("route", "arrow", "arrowhead", "cameras", "signals", "destination", "destination-line", "me")
+        val sources = listOf("route", "arrow", "arrowhead", "cameras", "signals", "pois", "via", "destination", "destination-line", "me")
             .joinToString(",") { """"$it":{"type":"geojson","data":$EMPTY}""" } +
             ""","route-head":{"type":"geojson","lineMetrics":true,"data":$EMPTY}""" + traffic
 

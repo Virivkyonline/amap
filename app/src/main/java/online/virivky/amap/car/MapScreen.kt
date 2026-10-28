@@ -104,6 +104,7 @@ class MapScreen(carContext: CarContext, private val map: CarMapSurface) : Screen
                         }
                         .build()
                 )
+                if (nav.phase == Phase.NAVIGATING) strip.addAction(servicesAction(withTitle = false))
             }
             Phase.PREVIEW, Phase.ROUTING -> {
                 if (nav.route != null) {
@@ -129,9 +130,21 @@ class MapScreen(carContext: CarContext, private val map: CarMapSurface) : Screen
                 )
                 strip.addAction(searchAction(withTitle = false))
             }
-            Phase.IDLE -> strip.addAction(searchAction(withTitle = true))
+            Phase.IDLE -> {
+                strip.addAction(searchAction(withTitle = true))
+                strip.addAction(servicesAction(withTitle = true))
+            }
         }
         return strip.build()
+    }
+
+    /** Nabíjačky, pumpy a ďalšie služby (počas navigácie pozdĺž trasy). */
+    private fun servicesAction(withTitle: Boolean): Action {
+        val action = Action.Builder()
+            .setIcon(carContext.carIcon(R.drawable.ic_ev_station))
+            .setOnClickListener { screenManager.push(ServicesScreen(carContext)) }
+        if (withTitle) action.setTitle("Služby")
+        return action.build()
     }
 
     private fun searchAction(withTitle: Boolean): Action {

@@ -25,7 +25,7 @@ object ManeuverIcons {
 
     fun bitmap(step: RouteStep, size: Int = 128, color: Int = Color.WHITE): Bitmap {
         val kind = when (step.type) {
-            "arrive" -> "arrive"
+            "arrive", "waypoint" -> "arrive"
             "roundabout", "rotary", "roundabout turn" -> "round"
             // Rozdvojenie a zjazd: druhá vetva cesty sivou (ako na tabuliach).
             "fork", "off ramp", "on ramp", "merge" -> if (angle(step.modifier) != 0f) "branch" else "turn"

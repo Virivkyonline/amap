@@ -47,7 +47,7 @@ object RoadData {
                 "way(bn.r)[highway][tunnel~\"^(yes|avalanche_protector)$\"];out body;" +
                 "node(around.r:40)[highway=speed_camera];out;" +
                 "node.r[highway=traffic_signals];out tags;"
-            val elements = JSONObject(post(query)).optJSONArray("elements") ?: continue
+            val elements = JSONObject(overpass(query)).optJSONArray("elements") ?: continue
             for (i in 0 until elements.length()) {
                 val e = elements.getJSONObject(i)
                 val tags = e.optJSONObject("tags") ?: JSONObject()
@@ -144,7 +144,7 @@ object RoadData {
             query.append("node[highway=speed_camera]($box);node[highway=traffic_signals]($box);")
         }
         query.append(");out;")
-        val elements = JSONObject(post(query.toString())).optJSONArray("elements") ?: return null
+        val elements = JSONObject(overpass(query.toString())).optJSONArray("elements") ?: return null
         val cameras = ArrayList<Camera>()
         val signals = ArrayList<Double>()
         for (i in 0 until elements.length()) {
@@ -170,7 +170,8 @@ object RoadData {
         return Result(null, sortedCameras, sortedSignals.toDoubleArray())
     }
 
-    private fun post(query: String): String {
+    /** Dotaz na Overpass API (s náhradným serverom). */
+    fun overpass(query: String): String {
         val form = "data=" + URLEncoder.encode(query, "UTF-8")
         var last: IOException? = null
         for (server in SERVERS) {

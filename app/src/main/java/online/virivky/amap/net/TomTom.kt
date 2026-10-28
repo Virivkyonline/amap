@@ -18,18 +18,20 @@ import kotlin.math.roundToInt
 object TomTom {
     private const val BASE = "https://api.tomtom.com/routing/1/calculateRoute/"
 
-    fun route(key: String, from: GeoPoint, to: GeoPoint, heading: Float?): Route =
-        try {
-            parse(JSONObject(Http.getString(url(key, from, to, heading, extended = true))))
+    fun route(key: String, from: GeoPoint, to: GeoPoint, heading: Float?, via: GeoPoint? = null): Route {
+        val points = listOfNotNull(from, via, to)
+        return try {
+            parse(JSONObject(Http.getString(url(key, points, heading, extended = true))))
         } catch (e: HttpException) {
             // Staršie verzie API nepoznajú limity a pruhy – skúsime len premávku.
             if (e.code != 400) throw e
-            parse(JSONObject(Http.getString(url(key, from, to, heading, extended = false))))
+            parse(JSONObject(Http.getString(url(key, points, heading, extended = false))))
         }
+    }
 
     /** Overí kľúč krátkou požiadavkou. Vráti null, ak funguje, inak popis chyby. */
     fun check(key: String): String? = try {
-        Http.getString(url(key, GeoPoint(48.1486, 17.1077), GeoPoint(48.1440, 17.1130), null, extended = false))
+        Http.getString(url(key, listOf(GeoPoint(48.1486, 17.1077), GeoPoint(48.1440, 17.1130)), null, extended = false))
         null
     } catch (e: HttpException) {
         when (e.code) {
@@ -40,10 +42,9 @@ object TomTom {
         "Nepodarilo sa spojiť s TomTom. Skontrolujte internet."
     }
 
-    private fun url(key: String, from: GeoPoint, to: GeoPoint, heading: Float?, extended: Boolean): String {
+    private fun url(key: String, points: List<GeoPoint>, heading: Float?, extended: Boolean): String {
         val sb = StringBuilder(BASE)
-            .append(from.lat).append(',').append(from.lon).append(':')
-            .append(to.lat).append(',').append(to.lon)
+            .append(points.joinToString(":") { "${it.lat},${it.lon}" })
             .append("/json?key=").append(URLEncoder.encode(key, "UTF-8"))
             .append("&traffic=true&travelMode=car&routeType=fastest&routeRepresentation=polyline")
             .append("&instructionsType=coded&computeTravelTimeFor=all&sectionType=traffic&sectionType=tunnel")
@@ -119,7 +120,7 @@ object TomTom {
             val (type, modifier) = maneuver(ins.optString("maneuver"), ins.optDouble("turnAngleInDecimalDegrees", 0.0))
             val roadNumbers = ins.optJSONArray("roadNumbers")
             // Pruhy patria k manévru, ku ktorému úsek s pruhmi vedie (každý úsek len raz).
-            val laneIndex = if (type == "depart" || type == "arrive") -1
+            val laneIndex = if (type == "depart" || type == "arrive" || type == "waypoint") -1
             else laneSections.indices.firstOrNull { it !in usedLanes && laneSections[it].first in (index - 3)..(index + 1) } ?: -1
             if (laneIndex >= 0) usedLanes.add(laneIndex)
             steps.add(
@@ -166,9 +167,12 @@ object TomTom {
         val side = if (angle < 0) "left" else "right"
         return when (code) {
             "DEPART" -> "depart" to null
-            "ARRIVE", "WAYPOINT_REACHED" -> "arrive" to null
-            "ARRIVE_LEFT", "WAYPOINT_LEFT" -> "arrive" to "left"
-            "ARRIVE_RIGHT", "WAYPOINT_RIGHT" -> "arrive" to "right"
+            "ARRIVE" -> "arrive" to null
+            "ARRIVE_LEFT" -> "arrive" to "left"
+            "ARRIVE_RIGHT" -> "arrive" to "right"
+            "WAYPOINT_REACHED" -> "waypoint" to null
+            "WAYPOINT_LEFT" -> "waypoint" to "left"
+            "WAYPOINT_RIGHT" -> "waypoint" to "right"
             "STRAIGHT", "FOLLOW" -> "continue" to "straight"
             "KEEP_RIGHT" -> "fork" to "slight right"
             "KEEP_LEFT" -> "fork" to "slight left"

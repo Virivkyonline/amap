@@ -164,6 +164,24 @@
                 android:visibility="gone" />
         </LinearLayout>
 
+        <HorizontalScrollView
+            android:id="@+id/categories"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:clipToPadding="false"
+            android:paddingStart="@dimen/gap"
+            android:paddingTop="2dp"
+            android:paddingEnd="@dimen/gap"
+            android:paddingBottom="6dp"
+            android:scrollbars="none">
+
+            <LinearLayout
+                android:id="@+id/category_row"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal" />
+        </HorizontalScrollView>
+
         <FrameLayout
             android:layout_width="match_parent"
             android:layout_height="0dp"
@@ -221,6 +239,68 @@
                     android:tint="@color/amap_blue" />
             </LinearLayout>
         </FrameLayout>
+
+        <LinearLayout
+            android:id="@+id/poi_panel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/gap"
+            android:layout_marginEnd="@dimen/gap"
+            android:layout_marginBottom="@dimen/gap"
+            android:background="@drawable/panel_bg"
+            android:elevation="6dp"
+            android:orientation="vertical"
+            android:paddingTop="6dp"
+            android:paddingBottom="6dp"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="16dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/poi_title"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:maxLines="1"
+                        android:textColor="@color/panel_text"
+                        android:textSize="18sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/poi_status"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:maxLines="2"
+                        android:textColor="@color/panel_text_secondary"
+                        android:textSize="13sp" />
+                </LinearLayout>
+
+                <ImageButton
+                    android:id="@+id/poi_close"
+                    android:layout_width="@dimen/button"
+                    android:layout_height="@dimen/button"
+                    android:background="?android:attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="Zavrieť služby"
+                    android:src="@drawable/ic_close"
+                    android:tint="@color/panel_text_secondary" />
+            </LinearLayout>
+
+            <ListView
+                android:id="@+id/poi_list"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:divider="@null" />
+        </LinearLayout>
 
         <LinearLayout
             android:id="@+id/bottom_panel"
@@ -351,6 +431,16 @@
                     android:textColor="@color/nav_text_secondary"
                     android:textSize="18sp" />
             </LinearLayout>
+
+            <ImageButton
+                android:id="@+id/nav_services"
+                android:layout_width="52dp"
+                android:layout_height="52dp"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Služby pozdĺž trasy"
+                android:scaleType="centerInside"
+                android:src="@drawable/ic_ev_station"
+                android:tint="@android:color/white" />
 
             <ImageButton
                 android:id="@+id/nav_voice"

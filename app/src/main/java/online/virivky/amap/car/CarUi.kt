@@ -81,7 +81,7 @@ object CarUi {
         val right = m?.contains("right") == true
         return when (step.type) {
             "depart" -> Maneuver.TYPE_DEPART
-            "arrive" -> when {
+            "arrive", "waypoint" -> when {
                 left -> Maneuver.TYPE_DESTINATION_LEFT
                 right -> Maneuver.TYPE_DESTINATION_RIGHT
                 else -> Maneuver.TYPE_DESTINATION

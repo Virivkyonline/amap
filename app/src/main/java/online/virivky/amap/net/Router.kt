@@ -22,27 +22,29 @@ object Router {
     var lastTomTomError: String? = null
         private set
 
-    fun route(from: GeoPoint, to: GeoPoint, heading: Float?): Route {
+    /** Trasa z [from] do [to], prípadne cez zastávku [via]. */
+    fun route(from: GeoPoint, to: GeoPoint, heading: Float?, via: GeoPoint? = null): Route {
         val key = Settings.tomtomKey
         if (key != null) {
             try {
-                return TomTom.route(key, from, to, heading).also { lastTomTomError = null }
+                return TomTom.route(key, from, to, heading, via).also { lastTomTomError = null }
             } catch (e: Exception) {
                 lastTomTomError = if (e is HttpException && e.code == 403) "Kľúč TomTom nefunguje alebo je vyčerpaný denný limit."
                 else "TomTom nedostupný, použitá trasa bez premávky."
             }
         }
-        return osrm(from, to, heading)
+        return osrm(from, to, heading, via)
     }
 
-    fun osrm(from: GeoPoint, to: GeoPoint, heading: Float?): Route {
+    fun osrm(from: GeoPoint, to: GeoPoint, heading: Float?, via: GeoPoint? = null): Route {
+        val points = listOfNotNull(from, via, to)
         val url = StringBuilder("https://router.project-osrm.org/route/v1/driving/")
-            .append(from.lon).append(',').append(from.lat).append(';')
-            .append(to.lon).append(',').append(to.lat)
+            .append(points.joinToString(";") { "${it.lon},${it.lat}" })
             .append("?overview=full&steps=true&geometries=polyline6&annotations=nodes&alternatives=false")
         if (heading != null) {
             // Pri prepočte trasy počas jazdy nech trasa začína v smere jazdy.
-            url.append("&bearings=").append(((heading.roundToInt() % 360) + 360) % 360).append(",60;")
+            url.append("&bearings=").append(((heading.roundToInt() % 360) + 360) % 360).append(",60")
+                .append(";".repeat(points.size - 1))
         }
         return parse(JSONObject(Http.getString(url.toString())))
     }
@@ -69,6 +71,13 @@ object Router {
             for (i in 0 until jsonSteps.length()) {
                 val s = jsonSteps.getJSONObject(i)
                 val m = s.getJSONObject("maneuver")
+                // Za zastávkou začína nový úsek odchodom – jeho dĺžku a čas pripíšeme zastávke.
+                if (l > 0 && i == 0 && m.optString("type") == "depart" && steps.isNotEmpty()) {
+                    val stop = steps.removeAt(steps.size - 1)
+                    steps.add(stop.with(distance = s.optDouble("distance", 0.0), duration = s.optDouble("duration", 0.0)))
+                    continue
+                }
+                val type = m.optString("type").let { if (it == "arrive" && l < legs.length() - 1) "waypoint" else it }
                 val loc = m.getJSONArray("location")
                 val location = GeoPoint(loc.getDouble(1), loc.getDouble(0))
                 // Manéver leží na jednom z bodov trasy – nájdeme ho od predchádzajúceho manévru ďalej.
@@ -85,7 +94,7 @@ object Router {
                 searchFrom = index
                 steps.add(
                     RouteStep(
-                        type = m.optString("type"),
+                        type = type,
                         modifier = m.optString("modifier").ifBlank { null },
                         exit = if (m.has("exit")) m.optInt("exit") else null,
                         name = s.optString("name"),

@@ -35,7 +35,11 @@ class RouteStep(
     val lanes: List<LaneInfo> = emptyList(),
     /** Číslo výjazdu z diaľnice (z tabule), ak je známe. */
     val exitNumber: String = "",
-)
+) {
+    /** Kópia s inou dĺžkou a časom do ďalšieho manévru. */
+    fun with(distance: Double, duration: Double) =
+        RouteStep(type, modifier, exit, name, ref, destinations, distance, duration, location, startIndex, lanes, exitNumber)
+}
 
 /** Aktuálny stav jazdy po trase. */
 class Progress(

@@ -14,6 +14,11 @@ Vlastná navigácia pre Android, ktorá funguje aj v **Android Auto**.
 - radary na mape s hlasovým upozornením
 - **živá premávka (TomTom)**: farby premávky na cestách, trasa zafarbená podľa zápch,
   výpočet trasy a času príchodu podľa premávky, každých 5 minút hľadanie rýchlejšej trasy
+- **služby na mape**: nabíjačky pre elektromobily (s kľúčom TomTom aj počet voľných
+  nabíjacích bodov), pumpy, parkovanie, odpočívadlá, jedlo, káva, potraviny, ubytovanie,
+  lekárne a bankomaty – v okolí, počas navigácie pozdĺž trasy
+- **zastávka po ceste**: počas navigácie vybraná nabíjačka či pumpa sa pridá ako zastávka
+  a trasa potom pokračuje do pôvodného cieľa
 - navigáciu spustenú v mobile vidno v aute a naopak
 - dlhé podržanie prsta na mape v mobile = navigovať na to miesto
 
@@ -69,11 +74,18 @@ Android Auto štandardne zobrazuje len aplikácie z Google Play. Pre vlastnú ap
 Kľúč je uložený len v telefóne. Bez neho apka funguje ďalej, len bez premávky.
 Bezplatný program TomTom má denné limity, ktoré na bežné osobné jazdenie stačia.
 
+Pre služby (nabíjačky s obsadenosťou) musí mať kľúč v my.tomtom.com zapnuté produkty
+**Search API** a **EV Charging Stations Availability API** (kľúč → Edit key). Bez nich
+sa služby hľadajú v OpenStreetMap – nájdu sa tiež, len bez obsadenosti nabíjačiek.
+
 ## Ovládanie v aute
 
 - **Hľadať** – zadanie cieľa (počas jazdy auto písanie nedovolí, preto sú hneď
   zobrazené nedávne ciele; ciele sa dajú vyhľadať aj v mobile pred jazdou)
 - **Štart** – spustí navigáciu, **Ukončiť** ju zastaví
+- **Služby** (ikona nabíjačky) – vyber druh (nabíjačky, pumpy, …), zoznam sa ukáže vľavo
+  a miesta na mape. Mimo navigácie ťuk na miesto = trasa k nemu; počas navigácie sa
+  pridá ako zastávka. Zastávku zrušíš v Službách tlačidlom **Zrušiť zastávku**.
 - tlačidlá na mape: posun, priblížiť, oddialiť, späť na moju polohu
 - reproduktor – vypnutie/zapnutie hlasu
 
@@ -85,6 +97,7 @@ Bezplatný program TomTom má denné limity, ktoré na bežné osobné jazdenie 
 | vyhľadávanie | Nominatim (nominatim.openstreetmap.org) |
 | výpočet trasy, jazdné pruhy | TomTom (s kľúčom, podľa premávky), inak OSRM (router.project-osrm.org) |
 | farby premávky na cestách | TomTom Traffic Flow (s kľúčom) |
+| služby, nabíjačky a ich obsadenosť | TomTom Search a EV Availability (s kľúčom), inak Overpass API |
 | rýchlostné limity, radary, semafory | Overpass API (overpass-api.de) |
 | hlas | prevod textu na reč v telefóne (slovenčina, inak čeština) |
 

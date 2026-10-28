@@ -7,7 +7,10 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.net.Uri
+import android.graphics.Color
 import android.graphics.Rect
+import android.graphics.drawable.BitmapDrawable
+import android.graphics.drawable.GradientDrawable
 import android.location.Location
 import android.os.Build
 import android.os.Bundle
@@ -15,6 +18,7 @@ import android.text.SpannableString
 import android.text.Spanned
 import android.text.style.AbsoluteSizeSpan
 import android.text.style.ForegroundColorSpan
+import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
 import android.view.inputmethod.EditorInfo
@@ -30,12 +34,16 @@ import android.widget.TextView
 import android.widget.Toast
 import online.virivky.amap.R
 import online.virivky.amap.data.Place
+import online.virivky.amap.data.Poi
+import online.virivky.amap.data.PoiCategory
 import online.virivky.amap.data.Recents
+import online.virivky.amap.data.Services
 import online.virivky.amap.data.Settings
 import online.virivky.amap.geo.GeoPoint
 import online.virivky.amap.location.LocationTracker
 import online.virivky.amap.map.DriveHud
 import online.virivky.amap.map.NavMap
+import online.virivky.amap.map.PoiIcons
 import online.virivky.amap.nav.Instructions
 import online.virivky.amap.nav.LaneIcons
 import online.virivky.amap.nav.ManeuverIcons
@@ -82,9 +90,27 @@ class MainActivity : Activity() {
     private lateinit var navLights: TextView
     private lateinit var navArrival: TextView
     private lateinit var navVoice: ImageButton
+    private lateinit var categories: View
+    private lateinit var poiPanel: View
+    private lateinit var poiTitle: TextView
+    private lateinit var poiStatus: TextView
+    private lateinit var poiList: ListView
     private val adapter = PlaceAdapter()
+    private val poiAdapter = PoiAdapter()
+    private val chips = LinkedHashMap<PoiCategory, TextView>()
+    private lateinit var stopChip: TextView
+    private var styledCategory: PoiCategory? = null
+    private var chipsStyled = false
+
+    /** Počas navigácie: zobrazený rad so službami (tlačidlo v spodnej lište). */
+    private var servicesOpen = false
 
     private val navigationListener = NavigationController.Listener { render() }
+    private val servicesListener = Services.Listener {
+        // Obsadenosť nabíjačiek sa mení v tých istých položkách.
+        poiAdapter.notifyDataSetChanged()
+        render()
+    }
     private val locationListener: (Location) -> Unit = {
         navMap?.update()
         hud.invalidate()
@@ -124,7 +150,13 @@ class MainActivity : Activity() {
         navLights = findViewById(R.id.nav_lights)
         navArrival = findViewById(R.id.nav_arrival)
         navVoice = findViewById(R.id.nav_voice)
+        categories = findViewById(R.id.categories)
+        poiPanel = findViewById(R.id.poi_panel)
+        poiTitle = findViewById(R.id.poi_title)
+        poiStatus = findViewById(R.id.poi_status)
+        poiList = findViewById(R.id.poi_list)
         hud.showAttribution = true
+        buildCategories()
 
         mapView.onCreate(savedInstanceState)
         mapView.getMapAsync { map ->
@@ -140,15 +172,25 @@ class MainActivity : Activity() {
                     )
                     true
                 }
-                map.addOnMapClickListener {
+                map.addOnMapClickListener { latLng ->
                     hideKeyboard()
-                    false
+                    val screen = map.projection.toScreenLocation(latLng)
+                    val poi = controller.poiAt(screen.x, screen.y)
+                    if (poi != null) choosePoi(poi)
+                    poi != null
                 }
             }
             updateViewport()
         }
 
         results.adapter = adapter
+        poiList.adapter = poiAdapter
+        poiList.setOnItemClickListener { _, _, position, _ -> choosePoi(poiAdapter.getItem(position)) }
+        findViewById<View>(R.id.poi_close).setOnClickListener { closeServices() }
+        findViewById<View>(R.id.nav_services).setOnClickListener {
+            if (servicesOpen) closeServices() else servicesOpen = true
+            render()
+        }
         results.setOnItemClickListener { _, _, position, _ -> choose(adapter.getItem(position)) }
         results.setOnItemLongClickListener { _, _, position, _ ->
             val place = adapter.getItem(position)
@@ -194,6 +236,7 @@ class MainActivity : Activity() {
         LocationTracker.acquire(this)
         LocationTracker.addListener(locationListener)
         nav.addListener(navigationListener)
+        Services.addListener(servicesListener)
         render()
     }
 
@@ -209,6 +252,7 @@ class MainActivity : Activity() {
 
     override fun onStop() {
         nav.removeListener(navigationListener)
+        Services.removeListener(servicesListener)
         LocationTracker.removeListener(locationListener)
         LocationTracker.release(this)
         mapView.onStop()
@@ -245,6 +289,7 @@ class MainActivity : Activity() {
                 hideKeyboard()
             }
             nav.phase == Phase.ROUTING || nav.phase == Phase.PREVIEW -> nav.cancelPreview()
+            Services.category != null || servicesOpen -> closeServices()
             else -> super.onBackPressed()
         }
     }
@@ -311,21 +356,129 @@ class MainActivity : Activity() {
         nav.preview(place)
     }
 
+    /** Rad tlačidiel so službami pod vyhľadávaním (ako v AMap). */
+    private fun buildCategories() {
+        val row = findViewById<LinearLayout>(R.id.category_row)
+        val d = resources.displayMetrics.density
+        fun chip(label: String, icon: android.graphics.drawable.Drawable?, onClick: () -> Unit) = TextView(this).apply {
+            text = label
+            textSize = 14f
+            gravity = Gravity.CENTER_VERTICAL
+            compoundDrawablePadding = (6 * d).toInt()
+            setPadding((6 * d).toInt(), (5 * d).toInt(), (14 * d).toInt(), (5 * d).toInt())
+            setCompoundDrawablesRelativeWithIntrinsicBounds(icon, null, null, null)
+            elevation = 3 * d
+            setOnClickListener { onClick() }
+            row.addView(this, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                marginEnd = (8 * d).toInt()
+            })
+        }
+        stopChip = chip("Zrušiť zastávku", getDrawable(R.drawable.ic_close)?.mutate()?.apply {
+            setTint(Color.WHITE)
+            setBounds(0, 0, (24 * d).toInt(), (24 * d).toInt())
+        }) { nav.removeStop() }
+        stopChip.background = GradientDrawable().apply {
+            cornerRadius = 20 * d
+            setColor(getColor(R.color.amap_red))
+        }
+        stopChip.setTextColor(Color.WHITE)
+        PoiCategory.entries.forEach { category ->
+            chips[category] = chip(category.label, BitmapDrawable(resources, PoiIcons.badge(category, (26 * d).toInt()))) {
+                if (Services.category == category) Services.clear() else Services.show(category, searchCenter())
+            }
+        }
+    }
+
+    /** Stred hľadania služieb: posunutá mapa, inak poloha (null). */
+    private fun searchCenter(): GeoPoint? {
+        val m = navMap ?: return null
+        if (m.follow || nav.phase == Phase.NAVIGATING) return null
+        val target = m.map.cameraPosition.target ?: return null
+        return GeoPoint(target.latitude, target.longitude)
+    }
+
+    private fun closeServices() {
+        servicesOpen = false
+        Services.clear()
+        render()
+    }
+
+    private fun renderServices() {
+        val d = resources.displayMetrics.density
+        if (!chipsStyled || styledCategory != Services.category) {
+            chips.forEach { (category, chip) ->
+                val selected = Services.category == category
+                chip.background = GradientDrawable().apply {
+                    cornerRadius = 20 * d
+                    setColor(if (selected) category.color else getColor(R.color.panel))
+                }
+                chip.setTextColor(if (selected) Color.WHITE else getColor(R.color.panel_text))
+            }
+            styledCategory = Services.category
+            chipsStyled = true
+        }
+        stopChip.visibility = if (nav.via != null) View.VISIBLE else View.GONE
+
+        val category = Services.category
+        val phase = nav.phase
+        poiPanel.visibility =
+            if (category != null && (phase == Phase.IDLE || phase == Phase.NAVIGATING)) View.VISIBLE else View.GONE
+        if (category == null) {
+            if (poiAdapter.pois.isNotEmpty()) poiAdapter.pois = emptyList()
+            return
+        }
+        poiTitle.text = category.label + if (Services.alongRoute) " pozdĺž trasy" else " v okolí"
+        val found = Services.results
+        poiStatus.text = when {
+            Services.loading -> "Hľadám…"
+            Services.error != null -> Services.error
+            category == PoiCategory.EV && Settings.tomtomKey == null ->
+                "${placesCount(found.size)} · obsadenosť nabíjačiek ukáže kľúč TomTom"
+            else -> placesCount(found.size)
+        }
+        poiAdapter.alongRoute = Services.alongRoute
+        if (poiAdapter.pois !== found) poiAdapter.pois = found
+        // Zoznam najviac na 3,5 riadka, aby bolo vidieť aj mapu.
+        val height = (minOf(found.size.toFloat(), 3.5f) * 62 * d).toInt()
+        if (poiList.layoutParams.height != height) {
+            poiList.layoutParams.height = height
+            poiList.requestLayout()
+        }
+    }
+
+    private fun placesCount(n: Int) = when (n) {
+        1 -> "1 miesto"
+        in 2..4 -> "$n miesta"
+        else -> "$n miest"
+    }
+
+    /** Vybraná služba: počas navigácie zastávka, inak náhľad trasy k nej. */
+    private fun choosePoi(poi: Poi) {
+        if (nav.phase != Phase.NAVIGATING) {
+            nav.preview(poi.toPlace())
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle(poi.name)
+            .setMessage(poi.detail())
+            .setPositiveButton("Pridať zastávku") { _, _ ->
+                nav.addStop(poi.toPlace())
+                closeServices()
+            }
+            .setNeutralButton("Navigovať sem") { _, _ -> nav.preview(poi.toPlace()) }
+            .setNegativeButton("Zrušiť", null)
+            .show()
+    }
+
     private fun hideKeyboard() {
         getSystemService(InputMethodManager::class.java)?.hideSoftInputFromWindow(searchInput.windowToken, 0)
     }
 
     private fun updateViewport() {
-        val top = when {
-            instructionCard.visibility == View.VISIBLE -> instructionCard.bottom
-            searchBar.visibility == View.VISIBLE -> searchBar.bottom
-            else -> overlay.paddingTop
-        }
-        val bottom = when {
-            navBar.visibility == View.VISIBLE -> navBar.top
-            bottomPanel.visibility == View.VISIBLE -> bottomPanel.top
-            else -> overlay.height - overlay.paddingBottom
-        }
+        val top = listOf(searchBar, instructionCard, categories)
+            .filter { it.visibility == View.VISIBLE }.maxOfOrNull { it.bottom } ?: overlay.paddingTop
+        val bottom = listOf(poiPanel, bottomPanel, navBar)
+            .filter { it.visibility == View.VISIBLE }.minOfOrNull { it.top } ?: (overlay.height - overlay.paddingBottom)
         val area = Rect(0, top, mapView.width, bottom)
         if (area.height() <= 0) return
         if (area != hud.viewport) {
@@ -348,6 +501,10 @@ class MainActivity : Activity() {
         myLocation.visibility = if (navigating && following) View.GONE else View.VISIBLE
         mapControls.visibility = if (zoomIn.visibility == View.GONE && myLocation.visibility == View.GONE) View.GONE else View.VISIBLE
         primaryButton.isEnabled = true
+        if (phase != Phase.NAVIGATING) servicesOpen = false
+        categories.visibility =
+            if (phase == Phase.IDLE || (phase == Phase.NAVIGATING && servicesOpen)) View.VISIBLE else View.GONE
+        renderServices()
 
         when (phase) {
             Phase.IDLE -> Unit
@@ -399,7 +556,9 @@ class MainActivity : Activity() {
         val info = TextView(this).apply {
             text = "Živá premávka (TomTom)\n\n" +
                 "1. Zaregistrujte sa zdarma na developer.tomtom.com\n" +
-                "2. V časti „Keys“ skopírujte API kľúč a vložte ho sem.\n\n" +
+                "2. V časti „Keys“ skopírujte API kľúč a vložte ho sem.\n" +
+                "3. Pre nabíjačky s obsadenosťou zapnite pri kľúči aj Search API " +
+                "a EV Charging Stations Availability API.\n\n" +
                 "Bez kľúča navigácia funguje ďalej, len bez premávky."
             textSize = 15f
         }
