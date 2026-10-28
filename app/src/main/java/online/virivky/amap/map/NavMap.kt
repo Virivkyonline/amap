@@ -15,6 +15,8 @@ import online.virivky.amap.geo.Geo
 import online.virivky.amap.geo.GeoPoint
 import online.virivky.amap.location.LocationTracker
 import online.virivky.amap.nav.Instructions
+import online.virivky.amap.nav.LaneIcons
+import online.virivky.amap.nav.RouteStep
 import online.virivky.amap.nav.NavigationController
 import online.virivky.amap.nav.NavigationController.Phase
 import online.virivky.amap.nav.Route
@@ -33,6 +35,7 @@ import online.virivky.amap.util.Bg
 import online.virivky.amap.util.Sun
 import org.json.JSONObject
 import kotlin.math.ln
+import kotlin.math.max
 
 /**
  * Ovládanie vektorovej mapy pre telefón aj auto: trasa, šípka manévru, poloha
@@ -73,6 +76,7 @@ class NavMap(
     private var fittedPois: List<Poi>? = null
     private var shownAlternatives: List<Route>? = null
     private var shownIncidents: Any? = null
+    private var shownLanes = ""
     private var shownSelected: Route? = null
     private var trafficKey = Settings.trafficLayerKey
 
@@ -169,6 +173,7 @@ class NavMap(
             shownPois = null
             shownAlternatives = null
             shownIncidents = null
+            shownLanes = ""
             update()
         }
     }
@@ -310,6 +315,24 @@ class NavMap(
             shownArrowKey = arrowKey
         }
 
+        // Pred manévrom s pruhmi: cesta rozdelená na pruhy, správne zvýraznené (ako v AMap).
+        val laneStep = step?.takeIf {
+            progress!!.distanceToNextStep < 600 && LaneIcons.useful(it.lanes) &&
+                it.type !in setOf("roundabout", "rotary", "arrive", "waypoint")
+        }
+        val lanesKey = if (laneStep != null) "${System.identityHashCode(route)}-${progress!!.nextStepIndex}" else ""
+        if (lanesKey != shownLanes) {
+            if (laneStep != null && route != null) {
+                val (lines, marks) = laneFeatures(route, progress!!.nextStepIndex, laneStep)
+                s.getSourceAs<GeoJsonSource>("lanes")?.setGeoJson(lines)
+                s.getSourceAs<GeoJsonSource>("lane-marks")?.setGeoJson(marks)
+            } else {
+                s.getSourceAs<GeoJsonSource>("lanes")?.setGeoJson(EMPTY)
+                s.getSourceAs<GeoJsonSource>("lane-marks")?.setGeoJson(EMPTY)
+            }
+            shownLanes = lanesKey
+        }
+
         val cameras = route?.cameras
         if (cameras !== shownCameras) {
             s.getSourceAs<GeoJsonSource>("cameras")?.setGeoJson(
@@ -430,6 +453,61 @@ class NavMap(
         updateFlow()
     }
 
+    /**
+     * Pruhy pred manévrom: povrch, deliace čiary, okraje a zvýraznené správne pruhy (posun od osi trasy
+     * v metroch rieši mapa), k tomu šípky na pruhoch a červené X na nesprávnych.
+     */
+    private fun laneFeatures(route: Route, stepIndex: Int, step: RouteStep): Pair<String, String> {
+        val lanes = step.lanes
+        val n = lanes.size
+        val w = 3.5
+        val end = route.stepAlong(stepIndex)
+        val start = max(0.0, end - 320)
+        val coords = route.slice(start, end + 12).joinToString(",") { coord(it) }
+        // Diaľnica či rampa = os trasy je stred jedného smeru; inak sú naše pruhy vpravo od osi cesty.
+        val oneWay = Instructions.isHighway(step) || step.type in setOf("fork", "merge", "on ramp", "off ramp") ||
+            step.ref.startsWith("D") || step.ref.startsWith("R")
+        val left = if (oneWay) -n * w / 2 else 0.0
+        val lines = ArrayList<String>()
+        fun line(kind: String, width: Double, offset: Double) {
+            lines.add("""{"type":"Feature","properties":{"k":"$kind","w":$width,"o":$offset},"geometry":{"type":"LineString","coordinates":[$coords]}}""")
+        }
+        line("surface", n * w + 0.6, left + n * w / 2)
+        lanes.forEachIndexed { i, lane ->
+            if (LaneIcons.recommended(lane, step.modifier) != null) line("good", w - 0.5, left + (i + 0.5) * w)
+        }
+        for (i in 1 until n) line("sep", 0.18, left + i * w)
+        line("edge", 0.35, left - 0.15)
+        line("edge", 0.35, left + n * w + 0.15)
+
+        val marks = ArrayList<String>()
+        fun mark(along: Double, offset: Double, icon: String) {
+            if (along < start + 5) return
+            val p = route.pointAt(along)
+            val bearing = Geo.bearing(p, route.pointAt(along + 5))
+            marks.add(point(Geo.offset(p, bearing, offset), """"icon":"$icon","bearing":$bearing"""))
+        }
+        lanes.forEachIndexed { i, lane ->
+            val center = left + (i + 0.5) * w
+            mark(end - 55, center, laneIcon(lane, step.modifier))
+            if (!lane.valid) mark(end - 22, center, "lane-x")
+        }
+        return """{"type":"FeatureCollection","features":[${lines.joinToString(",")}]}""" to
+            """{"type":"FeatureCollection","features":[${marks.joinToString(",")}]}"""
+    }
+
+    private fun laneIcon(lane: online.virivky.amap.nav.LaneInfo, modifier: String?): String {
+        val indication = LaneIcons.recommended(lane, modifier) ?: lane.indications.firstOrNull { it != "none" } ?: "straight"
+        return when (indication) {
+            "left", "sharp left" -> "lane-left"
+            "right", "sharp right" -> "lane-right"
+            "slight left" -> "lane-slight-left"
+            "slight right" -> "lane-slight-right"
+            "uturn" -> "lane-uturn"
+            else -> "lane-straight"
+        }
+    }
+
     /** Variant trasy pod bodom obrazovky (index v [NavigationController.routes]). */
     fun alternativeAt(x: Float, y: Float): Int? {
         val r = 16 * context.resources.displayMetrics.density
@@ -522,6 +600,8 @@ class NavMap(
                     val k = ((700 - p.distanceToNextStep) / 600).coerceIn(0.0, 1.0)
                     zoom += (17.8 - zoom).coerceAtLeast(0.0) * k
                 }
+                // Pri pohľade na pruhy bližšie, aby boli pruhy dobre vidieť.
+                if (shownLanes.isNotEmpty()) zoom = max(zoom, 18.7)
                 navZoom = zoom
             }
             val mode = Settings.mapPerspective

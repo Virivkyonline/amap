@@ -18,7 +18,10 @@ Vlastná navigácia **lech-map** pre Android, ktorá funguje aj v **Android Auto
 - slovenské hlasové pokyny, automatický prepočet trasy pri zídení z cesty
 - pohľad počas jazdy: **3D**, **2D v smere jazdy** alebo **2D sever hore** (tlačidlo 3D/2D/S);
   farby mapy **automaticky podľa slnka** (v aute podľa auta), stále denné alebo nočné
-- jazdné pruhy pred odbočkou (ktorým pruhom ísť)
+- jazdné pruhy pred odbočkou (ktorým pruhom ísť) a **pohľad na pruhy na mape**: pred odbočkou sa mapa
+  priblíži, cesta sa rozdelí na pruhy, správne pruhy sú zelené, na pruhoch biele šípky a červené X
+- zelená trasa ostáva **vnútri cesty** (pri priblížení sa cesta rozširuje, trasa má tmavú stredovú
+  medzeru a žlté stredové čiary cesty sú nad ňou)
 - **obraz križovatky** pred zjazdom, rozdvojením a kruhovým objazdom: nakreslený pohľad na cestu
   s tabuľou a zelenou šípkou (v mobile pod pokynom, v Android Auto v karte s pokynom)
 - rýchlostný limit a aktuálna rýchlosť, pri prekročení červená a hlasové upozornenie

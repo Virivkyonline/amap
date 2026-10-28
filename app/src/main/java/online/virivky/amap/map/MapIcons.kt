@@ -43,7 +43,9 @@ object MapIcons {
             category.icon to canvas(30f, 38f) { w, h -> PoiIcons.marker(this, category, w, h) }
         } + IncidentIcons.names.associateWith { name ->
             canvas(30f, 30f) { w, h -> IncidentIcons.draw(this, name, w / 2, h / 2, w - 4f) }
-        }
+        } + LaneMarks.arrows.mapValues { (_, angle) ->
+            canvas(24f, 56f) { w, h -> LaneMarks.arrow(this, angle, w, h) }
+        } + mapOf("lane-x" to canvas(24f, 24f) { w, h -> LaneMarks.cross(this, w, h) })
     }
 
     /** Šípka „>“ – pri umiestnení na čiare ukazuje v smere trasy. */

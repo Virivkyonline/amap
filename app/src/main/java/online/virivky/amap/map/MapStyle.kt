@@ -103,6 +103,10 @@ object MapStyle {
     private fun casing(vararg stops: Pair<Number, Number>) =
         width(*stops.map { (z, w) -> z to w.toDouble() + (1.0 + (z.toDouble() - 14.0) * 2.0 / 3.0).coerceIn(1.0, 3.0) }.toTypedArray())
 
+    /** Šírka či posun v metroch z vlastnosti [prop] prepočítaná na body obrazovky podľa priblíženia (~48,5° s. š.). */
+    private fun meters(prop: String) =
+        """["interpolate",["exponential",2],["zoom"],15,["*",["get","$prop"],0.632],22,["*",["get","$prop"],80.9]]"""
+
     private fun linear(vararg stops: Pair<Number, Number>) =
         """["interpolate",["linear"],["zoom"],${stops.joinToString(",") { "${it.first},${it.second}" }}]"""
 
@@ -125,11 +129,12 @@ object MapStyle {
      */
     fun json(dark: Boolean, trafficKey: String? = null): String {
         val c = if (dark) NIGHT else DAY
-        val motorwayStops = arrayOf<Pair<Number, Number>>(5 to 0.6, 10 to 2.2, 14 to 8, 18 to 32)
-        val majorStops = arrayOf<Pair<Number, Number>>(8 to 0.5, 12 to 2.2, 15 to 9, 18 to 28)
-        val secondaryStops = arrayOf<Pair<Number, Number>>(10 to 0.5, 13 to 2.4, 15 to 7, 18 to 24)
-        val minorStops = arrayOf<Pair<Number, Number>>(13 to 0.6, 15 to 4.5, 18 to 18)
-        val serviceW = width(14 to 0.5, 16 to 2.5, 18 to 9)
+        // Od priblíženia 18 sa šírka zdvojnásobuje s každým stupňom ako skutočná cesta.
+        val motorwayStops = arrayOf<Pair<Number, Number>>(5 to 0.6, 10 to 2.2, 14 to 8, 18 to 32, 19 to 62, 20 to 122)
+        val majorStops = arrayOf<Pair<Number, Number>>(8 to 0.5, 12 to 2.2, 15 to 9, 18 to 28, 19 to 54, 20 to 106)
+        val secondaryStops = arrayOf<Pair<Number, Number>>(10 to 0.5, 13 to 2.4, 15 to 7, 18 to 24, 19 to 46, 20 to 90)
+        val minorStops = arrayOf<Pair<Number, Number>>(13 to 0.6, 15 to 4.5, 18 to 18, 19 to 34, 20 to 66)
+        val serviceW = width(14 to 0.5, 16 to 2.5, 18 to 9, 19 to 17, 20 to 33)
 
         // V noci: pri jazde tmavý asfalt so svetlými okrajmi, pri oddialení modrosivé cesty.
         val near = c.asphaltNear
@@ -248,12 +253,12 @@ object MapStyle {
                   "line-width":${linear(5 to 2.5, 12 to 5, 15 to 8.5, 17 to 13, 18 to 18)}}}"""
             )
 
-            // Cesta, po ktorej vedie trasa, zvýraznená tyrkysovou (ako v AMap).
+            // Cesta, po ktorej vedie trasa, zvýraznená tyrkysovou (ako v AMap) – najviac na šírku cesty.
             add(
                 """{"id":"route-corridor","type":"line","source":"route","minzoom":12,
                 "layout":{"line-cap":"round","line-join":"round"},
                 "paint":{"line-color":"${if (dark) "#2b5654" else "#cde8e1"}","line-opacity":0.8,
-                  "line-width":${linear(12 to 5, 14 to 11, 16 to 18, 17 to 25, 18 to 36)}}}"""
+                  "line-width":${width(12 to 2, 13 to 2.5, 15 to 5, 18 to 18, 19 to 34, 20 to 66)}}}"""
             )
 
             // Trasa so svetlým žiarom pri aute a bielymi šípkami v smere jazdy.
@@ -261,25 +266,45 @@ object MapStyle {
                 """{"id":"route-casing","type":"line","source":"route",
                 "layout":{"line-cap":"round","line-join":"round"},
                 "paint":{"line-color":${trafficColor(c.routeCasing, "#b89100", "#b3261e", "#6b0d14")},
-                  "line-width":${linear(5 to 4, 12 to 8, 15 to 13, 17 to 19, 18 to 26)}}}"""
+                  "line-width":${linear(5 to 4, 12 to 6.5, 15 to 7, 16 to 7.5, 17 to 11, 18 to 16.5, 19 to 31, 20 to 60)}}}"""
             )
             add(
                 """{"id":"route-line","type":"line","source":"route",
                 "layout":{"line-cap":"round","line-join":"round"},
                 "paint":{"line-color":${trafficColor(c.route, "#f5c518", "#f2453d", "#9b1622")},
-                  "line-width":${linear(5 to 2.5, 12 to 5.5, 15 to 10, 17 to 15, 18 to 21)}}}"""
+                  "line-width":${linear(5 to 2.5, 12 to 4.5, 15 to 5, 16 to 6, 17 to 9, 18 to 14, 19 to 27, 20 to 54)}}}"""
             )
             // Svetlé pruhy, ktoré plynú po trase v smere jazdy (mapa ich posúva, pozri NavMap).
             add(
                 """{"id":"route-flow","type":"line","source":"route",
                 "layout":{"line-cap":"butt","line-join":"round"},
                 "paint":{"line-color":"#ffffff","line-opacity":0.38,"line-dasharray":[0,4,3],
-                  "line-width":${linear(5 to 1.2, 12 to 2.8, 15 to 5, 17 to 7.5, 18 to 10.5)}}}"""
+                  "line-width":${linear(5 to 1.2, 12 to 2.2, 15 to 2.5, 16 to 3, 17 to 4.5, 18 to 7, 19 to 13.5, 20 to 27)}}}"""
+            )
+            // Pri veľkom priblížení tmavá medzera medzi pruhmi trasy a čiary cesty nad trasou (ako v AMap).
+            add(
+                """{"id":"route-gap","type":"line","source":"route","minzoom":17,
+                "layout":{"line-cap":"butt","line-join":"round"},
+                "paint":{"line-color":"${if (dark) "#1d5c4a" else "#178a64"}","line-opacity":0.85,
+                  "line-width":["interpolate",["exponential",2],["zoom"],17,1.3,22,42]}}"""
+            )
+            add(
+                """{"id":"route-center-line","type":"line","source":"omt","source-layer":"transportation","minzoom":16,
+                "filter":["all",["match",["get","class"],["primary","secondary","tertiary","minor"],true,false],
+                  ["!=",["get","oneway"],1],$NOT_TUNNEL],
+                "paint":{"line-color":"${c.centerLine}","line-width":${linear(16 to 0.8, 18 to 2, 20 to 4)},"line-dasharray":[5,4]}}"""
+            )
+            add(
+                """{"id":"route-lane-divider","type":"line","source":"omt","source-layer":"transportation","minzoom":16,
+                "filter":["all",["!=",["get","ramp"],1],$NOT_TUNNEL,
+                  ["any",["==",["get","class"],"motorway"],["all",["==",["get","class"],"trunk"],["==",["get","oneway"],1]]]],
+                "paint":{"line-color":"${if (dark) "#e6e9ef" else "#c2c7cf"}","line-opacity":0.8,
+                  "line-width":${linear(16 to 1, 18 to 2, 20 to 4)},"line-dasharray":[6,6]}}"""
             )
             add(
                 """{"id":"route-glow","type":"line","source":"route-head",
                 "layout":{"line-cap":"round","line-join":"round"},
-                "paint":{"line-width":${linear(12 to 5, 15 to 9, 17 to 14, 18 to 20)},
+                "paint":{"line-width":${linear(12 to 4, 15 to 5, 16 to 6, 17 to 9, 18 to 14, 19 to 27, 20 to 54)},
                   "line-gradient":["interpolate",["linear"],["line-progress"],0,"rgba(255,255,255,0.95)",0.6,"rgba(200,255,235,0.45)",1,"rgba(34,211,154,0)"]}}"""
             )
             add(
@@ -289,6 +314,35 @@ object MapStyle {
                   "icon-allow-overlap":true,"icon-ignore-placement":true,"icon-rotation-alignment":"map",
                   "icon-keep-upright":false},
                 "paint":{"icon-opacity":0.85}}"""
+            )
+
+            // Pruhy pred manévrom (pohľad na pruhy).
+            add(
+                """{"id":"lanes-surface","type":"line","source":"lanes","minzoom":15,"filter":["==",["get","k"],"surface"],
+                "layout":{"line-cap":"butt","line-join":"round"},
+                "paint":{"line-color":"${c.asphaltNear ?: "#9AA1AE"}","line-width":${meters("w")},"line-offset":${meters("o")}}}"""
+            )
+            add(
+                """{"id":"lanes-good","type":"line","source":"lanes","minzoom":15,"filter":["==",["get","k"],"good"],
+                "layout":{"line-cap":"butt","line-join":"round"},
+                "paint":{"line-color":"${c.route}","line-opacity":0.95,"line-width":${meters("w")},"line-offset":${meters("o")}}}"""
+            )
+            add(
+                """{"id":"lanes-sep","type":"line","source":"lanes","minzoom":15,"filter":["==",["get","k"],"sep"],
+                "layout":{"line-cap":"butt","line-join":"round"},
+                "paint":{"line-color":"#FFFFFF","line-opacity":0.9,"line-dasharray":[14,20],
+                  "line-width":${meters("w")},"line-offset":${meters("o")}}}"""
+            )
+            add(
+                """{"id":"lanes-edge","type":"line","source":"lanes","minzoom":15,"filter":["==",["get","k"],"edge"],
+                "layout":{"line-cap":"butt","line-join":"round"},
+                "paint":{"line-color":"${c.edgeNear ?: "#6E7586"}","line-width":${meters("w")},"line-offset":${meters("o")}}}"""
+            )
+            add(
+                """{"id":"lane-marks","type":"symbol","source":"lane-marks","minzoom":15,
+                "layout":{"icon-image":["get","icon"],"icon-rotate":["get","bearing"],"icon-rotation-alignment":"map",
+                  "icon-pitch-alignment":"map","icon-allow-overlap":true,"icon-ignore-placement":true,
+                  "icon-size":["interpolate",["exponential",2],["zoom"],15,0.092,22,11.7]}}"""
             )
 
             // Popisy ciest a miest.
@@ -321,17 +375,17 @@ object MapStyle {
             add(
                 """{"id":"arrow-casing","type":"line","source":"arrow",
                 "layout":{"line-cap":"butt","line-join":"round"},
-                "paint":{"line-color":"#1f6fff","line-width":${linear(14 to 13, 16 to 19, 17 to 24, 18 to 29)}}}"""
+                "paint":{"line-color":"#1f6fff","line-width":${linear(14 to 9, 16 to 11, 17 to 13, 18 to 18, 19 to 33, 20 to 64)}}}"""
             )
             add(
                 """{"id":"arrow-line","type":"line","source":"arrow",
                 "layout":{"line-cap":"butt","line-join":"round"},
-                "paint":{"line-color":"#ffffff","line-width":${linear(14 to 8, 16 to 13, 17 to 18, 18 to 23)}}}"""
+                "paint":{"line-color":"#ffffff","line-width":${linear(14 to 5.5, 16 to 7, 17 to 9, 18 to 13, 19 to 25, 20 to 48)}}}"""
             )
             add(
                 """{"id":"arrow-head","type":"symbol","source":"arrowhead",
                 "layout":{"icon-image":"arrowhead","icon-rotate":["get","bearing"],"icon-rotation-alignment":"map",
-                  "icon-pitch-alignment":"map","icon-size":${linear(14 to 0.45, 16 to 0.75, 17 to 1, 18 to 1.25)},
+                  "icon-pitch-alignment":"map","icon-size":${linear(14 to 0.32, 16 to 0.42, 17 to 0.52, 18 to 0.74, 19 to 1.4, 20 to 2.7)},
                   "icon-allow-overlap":true,"icon-ignore-placement":true}}"""
             )
 
@@ -405,7 +459,7 @@ object MapStyle {
               "tiles":["https://api.tomtom.com/traffic/map/4/tile/flow/$style/{z}/{x}/{y}.png?key=$key&tileSize=512&thickness=8"]}"""
         }
         val sources = listOf(
-            "route", "alternatives", "route-labels", "incidents", "incident-lines", "arrow", "arrowhead", "cameras",
+            "route", "alternatives", "route-labels", "incidents", "incident-lines", "lanes", "lane-marks", "arrow", "arrowhead", "cameras",
             "signals", "pois", "via",
             "destination", "destination-line", "me",
         )

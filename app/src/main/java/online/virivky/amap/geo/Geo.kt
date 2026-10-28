@@ -59,6 +59,15 @@ object Geo {
         return SegmentHit(sqrt(px * px + py * py), t)
     }
 
+    /** Bod posunutý o [right] metrov kolmo vpravo od smeru [bearing] (záporné = vľavo). */
+    fun offset(p: GeoPoint, bearing: Double, right: Double): GeoPoint {
+        val b = Math.toRadians(bearing + 90)
+        return GeoPoint(
+            p.lat + right * cos(b) / 111_320.0,
+            p.lon + right * sin(b) / (111_320.0 * cos(Math.toRadians(p.lat))),
+        )
+    }
+
     /** Body čiary najviac každých [spacing] metrov (kratšie dotazy pre Overpass). */
     fun thin(points: List<GeoPoint>, spacing: Double): List<GeoPoint> {
         if (points.size <= 2) return points
