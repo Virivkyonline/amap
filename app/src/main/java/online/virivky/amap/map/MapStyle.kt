@@ -10,6 +10,8 @@ object MapStyle {
         /** Farba podkladu pri veľkom priblížení (počas jazdy). */
         val backgroundNear: String,
         val residential: String,
+        /** Zastavané územie pri jazde (v noci tyrkysové ako v AMap). */
+        val residentialNear: String,
         val park: String,
         val wood: String,
         val water: String,
@@ -36,8 +38,9 @@ object MapStyle {
 
     private val NIGHT = Palette(
         background = "#1b2232",
-        backgroundNear = "#2a4245",
+        backgroundNear = "#1c2233",
         residential = "#1e2637",
+        residentialNear = "#283f42",
         park = "#1f3a3b",
         wood = "#1c3536",
         water = "#14273f",
@@ -46,8 +49,8 @@ object MapStyle {
         minor = "#3a4357",
         major = "#4a5469",
         motorway = "#5c6782",
-        asphaltNear = "#252a33",
-        edgeNear = "#9ea7b8",
+        asphaltNear = "#212839",
+        edgeNear = "#8e98b0",
         casing = null,
         motorwayCasing = null,
         centerLine = "#d8b93c",
@@ -65,6 +68,7 @@ object MapStyle {
         background = "#f2f3f5",
         backgroundNear = "#eef0f2",
         residential = "#eceef1",
+        residentialNear = "#e7e9ed",
         park = "#cdeac9",
         wood = "#c1e2bd",
         water = "#a5cbf5",
@@ -180,9 +184,9 @@ object MapStyle {
         val layers = buildList {
             add("""{"id":"background","type":"background","paint":{"background-color":${color(c.background, c.backgroundNear)}}}""")
             add(
-                """{"id":"residential","type":"fill","source":"omt","source-layer":"landuse","minzoom":9,"maxzoom":16,
-                "filter":["match",["get","class"],["residential","suburb","neighbourhood"],true,false],
-                "paint":{"fill-color":"${c.residential}","fill-opacity":${linear(14 to 1, 16 to 0)}}}"""
+                """{"id":"residential","type":"fill","source":"omt","source-layer":"landuse","minzoom":9,
+                "filter":["match",["get","class"],["residential","suburb","neighbourhood","commercial","retail","industrial"],true,false],
+                "paint":{"fill-color":${color(c.residential, c.residentialNear)}}}"""
             )
             add(
                 """{"id":"wood","type":"fill","source":"omt","source-layer":"landcover",

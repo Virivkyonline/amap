@@ -27,6 +27,8 @@ object ManeuverIcons {
         val kind = when (step.type) {
             "arrive" -> "arrive"
             "roundabout", "rotary", "roundabout turn" -> "round"
+            // Rozdvojenie a zjazd: druhá vetva cesty sivou (ako na tabuliach).
+            "fork", "off ramp", "on ramp", "merge" -> if (angle(step.modifier) != 0f) "branch" else "turn"
             else -> if (step.modifier == "uturn") "uturn" else "turn"
         }
         val key = "$kind|${step.modifier}|$size|$color"
@@ -83,6 +85,26 @@ object ManeuverIcons {
                 val ey = cy - (s * 0.3f * cos(rad)).toFloat()
                 canvas.drawLine(sx, sy, ex, ey, stroke)
                 arrowHead(canvas, fill, ex, ey, exit, s)
+            }
+            "branch" -> {
+                // Vetva, ktorou nejdeme, sivá; naša vetva biela navrch.
+                val main = angle.coerceIn(-50f, 50f)
+                val ghost = if (main < 0) main + 55f else main - 55f
+                val jx = s / 2
+                val jy = s * 0.55f
+                val len = s * 0.34f
+                val ghostPaint = Paint(stroke).apply { this.color = Color.argb(0x80, Color.red(color), Color.green(color), Color.blue(color)) }
+                val gr = Math.toRadians(ghost.toDouble())
+                canvas.drawLine(jx, jy, jx + (len * sin(gr)).toFloat(), jy - (len * cos(gr)).toFloat(), ghostPaint)
+                val mr = Math.toRadians(main.toDouble())
+                val ex = jx + (len * sin(mr)).toFloat()
+                val ey = jy - (len * cos(mr)).toFloat()
+                val path = Path()
+                path.moveTo(jx, s * 0.92f)
+                path.lineTo(jx, jy)
+                path.lineTo(ex, ey)
+                canvas.drawPath(path, stroke)
+                arrowHead(canvas, fill, ex, ey, main, s)
             }
             else -> {
                 val bx = s / 2
