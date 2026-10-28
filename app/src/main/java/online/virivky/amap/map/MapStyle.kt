@@ -273,6 +273,7 @@ object MapStyle {
             // Cesta, po ktorej vedie trasa, zvýraznená tyrkysovou (ako v AMap) – najviac na šírku cesty.
             add(
                 """{"id":"route-corridor","type":"line","source":"route","minzoom":12,"maxzoom":16.5,
+                "filter":["!=",["get","foot"],1],
                 "layout":{"line-cap":"round","line-join":"round"},
                 "paint":{"line-color":"#2b5654","line-opacity":0.8,
                   "line-width":${width(12 to 2, 13 to 2.5, 15 to 4.2, 16 to 7.5, 17 to 15, 18 to 30, 19 to 60, 20 to 121)}}}"""
@@ -281,12 +282,14 @@ object MapStyle {
             // Trasa so svetlým žiarom pri aute a bielymi šípkami v smere jazdy.
             add(
                 """{"id":"route-casing","type":"line","source":"route",
+                "filter":["!=",["get","foot"],1],
                 "layout":{"line-cap":"round","line-join":"round"},
                 "paint":{"line-color":${trafficColor(c.routeCasing, "#b89100", "#b3261e", "#6b0d14")},
                   "line-width":${linear(5 to 4, 12 to 6.5, 15 to 7, 16 to 7.5, 17 to 11, 18 to 19.5, 19 to 38, 20 to 76)}}}"""
             )
             add(
                 """{"id":"route-line","type":"line","source":"route",
+                "filter":["!=",["get","foot"],1],
                 "layout":{"line-cap":"round","line-join":"round"},
                 "paint":{"line-color":${trafficColor(c.route, "#f5c518", "#f2453d", "#9b1622")},
                   "line-width":${linear(5 to 2.5, 12 to 4.5, 15 to 5, 16 to 6, 17 to 9, 18 to 16.5, 19 to 33, 20 to 66)}}}"""
@@ -294,6 +297,7 @@ object MapStyle {
             // Svetlé pruhy, ktoré plynú po trase v smere jazdy (mapa ich posúva, pozri NavMap).
             add(
                 """{"id":"route-flow","type":"line","source":"route",
+                "filter":["!=",["get","foot"],1],
                 "layout":{"line-cap":"butt","line-join":"round"},
                 "paint":{"line-color":"#ffffff","line-opacity":0.38,"line-dasharray":[0,4,3],
                   "line-width":${linear(5 to 1.2, 12 to 2.2, 15 to 2.5, 16 to 3, 17 to 4.5, 18 to 8.2, 19 to 16.5, 20 to 33)}}}"""
@@ -301,6 +305,7 @@ object MapStyle {
             // Pri veľkom priblížení tmavá medzera medzi pruhmi trasy a čiary cesty nad trasou (ako v AMap).
             add(
                 """{"id":"route-gap","type":"line","source":"route","minzoom":17,
+                "filter":["!=",["get","foot"],1],
                 "layout":{"line-cap":"butt","line-join":"round"},
                 "paint":{"line-color":"${if (dark) "#1d5c4a" else "#178a64"}","line-opacity":0.85,
                   "line-width":["interpolate",["exponential",2],["zoom"],17,1.3,22,42]}}"""
@@ -326,6 +331,19 @@ object MapStyle {
                 "paint":{"line-color":"$zebraColor","line-opacity":0.95,
                   "line-width":${byRoad(0.94 / 6 * 0.6, false)},"line-offset":${byRoad(0.94, true)}}}"""
             )
+            // Pešia trasa: modré bodky s bielym okrajom (ako pešie trasy v iných navigáciách).
+            add(
+                """{"id":"route-walk-casing","type":"line","source":"route","filter":["==",["get","foot"],1],
+                "layout":{"line-cap":"round","line-join":"round"},
+                "paint":{"line-color":"#ffffff","line-dasharray":[0,1.48],
+                  "line-width":${linear(12 to 6.75, 16 to 10, 18 to 13.5, 20 to 18.9)}}}"""
+            )
+            add(
+                """{"id":"route-walk","type":"line","source":"route","filter":["==",["get","foot"],1],
+                "layout":{"line-cap":"round","line-join":"round"},
+                "paint":{"line-color":"#2f6fe0","line-dasharray":[0,2],
+                  "line-width":${linear(12 to 5, 16 to 7.4, 18 to 10, 20 to 14)}}}"""
+            )
             add(
                 """{"id":"route-glow","type":"line","source":"route-head",
                 "layout":{"line-cap":"round","line-join":"round"},
@@ -334,6 +352,7 @@ object MapStyle {
             )
             add(
                 """{"id":"route-chevrons","type":"symbol","source":"route","minzoom":13,
+                "filter":["!=",["get","foot"],1],
                 "layout":{"symbol-placement":"line","symbol-spacing":${linear(13 to 60, 18 to 120)},
                   "icon-image":"chevron","icon-size":${linear(13 to 0.55, 15 to 0.75, 18 to 1.2)},
                   "icon-allow-overlap":true,"icon-ignore-placement":true,"icon-rotation-alignment":"map",

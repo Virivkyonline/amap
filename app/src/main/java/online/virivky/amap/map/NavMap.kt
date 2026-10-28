@@ -369,13 +369,14 @@ class NavMap(
         val segment = if (navigating) head?.segmentIndex ?: 0 else -1
         if (route !== shownRoute || segment != shownSegment || snapped != null) {
             s.getSourceAs<GeoJsonSource>("route")?.setGeoJson(
-                if (route == null) EMPTY else routeFeatures(route, head?.segmentIndex ?: 0, head?.snapped)
+                if (route == null) EMPTY
+                else routeFeatures(route, head?.segmentIndex ?: 0, head?.snapped, nav.travelMode == TravelMode.FOOT)
             )
             shownRoute = route
             shownSegment = segment
             // Svetlý žiar na prvých metroch trasy pred autom.
             s.getSourceAs<GeoJsonSource>("route-head")?.setGeoJson(
-                if (route != null && progress != null && navigating) {
+                if (route != null && progress != null && navigating && nav.travelMode != TravelMode.FOOT) {
                     val from = shownAlong ?: progress.traveled
                     lineString(route.slice(from, from + 30))
                 } else {
@@ -888,7 +889,7 @@ class NavMap(
     }
 
     /** Trasa rozdelená na úseky podľa premávky (vlastnosť „level“ určuje farbu). */
-    private fun routeFeatures(route: Route, fromSegment: Int, head: GeoPoint?): String {
+    private fun routeFeatures(route: Route, fromSegment: Int, head: GeoPoint?, foot: Boolean): String {
         val levels = route.segmentTraffic
         val features = ArrayList<String>()
         var current = ArrayList<GeoPoint>()
@@ -896,7 +897,7 @@ class NavMap(
         for (i in fromSegment until route.points.size - 1) {
             val segmentLevel = levels.getOrElse(i) { 0 }
             if (segmentLevel != level) {
-                if (current.size >= 2) features.add(feature(current, level))
+                if (current.size >= 2) features.add(feature(current, level, foot))
                 current = ArrayList()
                 current.add(if (i == fromSegment && head != null) head else route.points[i])
                 level = segmentLevel
@@ -905,12 +906,12 @@ class NavMap(
             }
             current.add(route.points[i + 1])
         }
-        if (current.size >= 2) features.add(feature(current, level))
+        if (current.size >= 2) features.add(feature(current, level, foot))
         return """{"type":"FeatureCollection","features":[${features.joinToString(",")}]}"""
     }
 
-    private fun feature(points: List<GeoPoint>, level: Int) =
-        """{"type":"Feature","properties":{"level":$level},"geometry":{"type":"LineString","coordinates":[${points.joinToString(",") { coord(it) }}]}}"""
+    private fun feature(points: List<GeoPoint>, level: Int, foot: Boolean = false) =
+        """{"type":"Feature","properties":{"level":$level,"foot":${if (foot) 1 else 0}},"geometry":{"type":"LineString","coordinates":[${points.joinToString(",") { coord(it) }}]}}"""
 
     companion object {
         private const val EMPTY = """{"type":"FeatureCollection","features":[]}"""

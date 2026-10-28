@@ -83,6 +83,9 @@ object Router {
      * Ak miesto nie je pri chodníku, posledný kúsok vedie priamo k nemu; bez siete či cesty celá priamo.
      */
     fun walk(from: GeoPoint, to: GeoPoint): Route {
+        // Blízko (do 80 m) rovno – chodníky by mohli viesť okolo celého bloku.
+        val straight = Geo.distance(from, to)
+        if (straight < 80) return direct(from, to)
         val url = "https://routing.openstreetmap.de/routed-foot/route/v1/driving/" +
             "${from.lon},${from.lat};${to.lon},${to.lat}?overview=full&steps=true&geometries=polyline6"
         val route = try {
@@ -90,6 +93,8 @@ object Router {
         } catch (e: Exception) {
             return direct(from, to)
         }
+        // Začiatok či cieľ sa „prilepili“ na chodníky, ktoré sa spájajú až ďaleko: nezmyselná okľuka.
+        if (route.distance > maxOf(straight * 2.5, straight + 400)) return direct(from, to)
         val end = route.points.last()
         val rest = Geo.distance(end, to)
         if (rest < 10) return route
