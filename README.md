@@ -19,6 +19,8 @@ Vlastná navigácia **lech-map** pre Android, ktorá funguje aj v **Android Auto
 - pohľad počas jazdy: **3D**, **2D v smere jazdy** alebo **2D sever hore** (tlačidlo 3D/2D/S);
   farby mapy **automaticky podľa slnka** (v aute podľa auta), stále denné alebo nočné
 - jazdné pruhy pred odbočkou (ktorým pruhom ísť)
+- **obraz križovatky** pred zjazdom, rozdvojením a kruhovým objazdom: nakreslený pohľad na cestu
+  s tabuľou a zelenou šípkou (v mobile pod pokynom, v Android Auto v karte s pokynom)
 - rýchlostný limit a aktuálna rýchlosť, pri prekročení červená a hlasové upozornenie
 - radary na mape s hlasovým upozornením
 - **úsekové merania rýchlosti** (podľa OpenStreetMap): upozornenie pred úsekom, v úseku

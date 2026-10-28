@@ -173,6 +173,10 @@ class NavMap(
         }
     }
 
+    /** Mapa má práve nočné farby. */
+    val isDark: Boolean
+        get() = dark
+
     /** Systémový (v aute podľa auta) denný či nočný režim. */
     fun setDark(dark: Boolean) {
         systemDark = dark

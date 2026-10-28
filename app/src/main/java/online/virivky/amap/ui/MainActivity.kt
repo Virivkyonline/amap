@@ -55,6 +55,7 @@ import online.virivky.amap.data.TrafficEvents
 import online.virivky.amap.geo.GeoPoint
 import online.virivky.amap.location.LocationTracker
 import online.virivky.amap.map.DriveHud
+import online.virivky.amap.map.JunctionView
 import online.virivky.amap.map.NavMap
 import online.virivky.amap.map.PoiIcons
 import online.virivky.amap.nav.Instructions
@@ -88,6 +89,7 @@ class MainActivity : Activity() {
     private lateinit var maneuverBadge: TextView
     private lateinit var maneuverText: TextView
     private lateinit var lanesImage: ImageView
+    private lateinit var junctionImage: ImageView
     private lateinit var mapControls: View
     private lateinit var zoomIn: View
     private lateinit var zoomOut: View
@@ -172,6 +174,8 @@ class MainActivity : Activity() {
         maneuverBadge = findViewById(R.id.maneuver_badge)
         maneuverText = findViewById(R.id.maneuver_text)
         lanesImage = findViewById(R.id.lanes_image)
+        junctionImage = findViewById(R.id.junction_image)
+        junctionImage.clipToOutline = true
         mapControls = findViewById(R.id.map_controls)
         zoomIn = findViewById(R.id.zoom_in)
         zoomOut = findViewById(R.id.zoom_out)
@@ -1031,6 +1035,7 @@ class MainActivity : Activity() {
         val route = nav.route
         val p = nav.progress
         lanesImage.visibility = View.GONE
+        junctionImage.visibility = View.GONE
         maneuverBadge.visibility = View.GONE
         maneuverText.visibility = View.VISIBLE
         maneuverIcon.background = null
@@ -1087,6 +1092,12 @@ class MainActivity : Activity() {
         if (note != null) {
             maneuverText.text = note
             maneuverText.visibility = View.VISIBLE
+        }
+        // Zväčšený obraz križovatky pred zjazdom, rozdvojením a kruhovým objazdom.
+        if (JunctionView.wanted(step, p.distanceToNextStep)) {
+            val w = (instructionCard.width - instructionCard.paddingLeft - instructionCard.paddingRight).takeIf { it > 0 } ?: 1000
+            junctionImage.setImageBitmap(JunctionView.bitmap(step, w, (w * 0.56f).toInt(), navMap?.isDark ?: isDark))
+            junctionImage.visibility = View.VISIBLE
         }
         if (LaneIcons.useful(step.lanes) && p.distanceToNextStep < 1000) {
             lanesImage.setImageBitmap(LaneIcons.bitmap(step.lanes, step.modifier))

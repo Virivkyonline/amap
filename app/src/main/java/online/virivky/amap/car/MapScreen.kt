@@ -5,7 +5,10 @@ import androidx.car.app.CarToast
 import androidx.car.app.Screen
 import androidx.car.app.model.Action
 import androidx.car.app.model.ActionStrip
+import android.graphics.Bitmap
 import androidx.car.app.model.CarColor
+import androidx.car.app.model.CarIcon
+import androidx.core.graphics.drawable.IconCompat
 import androidx.car.app.model.Template
 import androidx.car.app.navigation.model.MessageInfo
 import androidx.car.app.navigation.model.NavigationTemplate
@@ -16,6 +19,7 @@ import online.virivky.amap.R
 import online.virivky.amap.data.Favorites
 import online.virivky.amap.data.Services
 import online.virivky.amap.data.Settings
+import online.virivky.amap.map.JunctionView
 import online.virivky.amap.nav.Instructions
 import online.virivky.amap.nav.NavigationController
 import online.virivky.amap.nav.NavigationController.Phase
@@ -55,6 +59,8 @@ class MapScreen(carContext: CarContext, private val map: CarMapSurface) : Screen
                         .setCurrentStep(CarUi.step(step), CarUi.distance(p.distanceToNextStep))
                     val then = route.steps.getOrNull(p.nextStepIndex + 1)
                     if (then != null && step.distance < 300) info.setNextStep(CarUi.step(then))
+                    // Obraz križovatky (Android Auto odporúča 500 × 312 dp; menší obrázok, aby sa dal rýchlo poslať).
+                    if (JunctionView.wanted(step, p.distanceToNextStep)) junctionIcon(step)?.let { info.setJunctionImage(it) }
                     builder.setNavigationInfo(info.build())
                     builder.setDestinationTravelEstimate(CarUi.estimate(p.remainingDistance, p.remainingSeconds))
                 }
@@ -87,6 +93,21 @@ class MapScreen(carContext: CarContext, private val map: CarMapSurface) : Screen
             Phase.IDLE -> Unit
         }
         return builder.build()
+    }
+
+    private var junctionFor: Any? = null
+    private var junction: CarIcon? = null
+
+    /** Obraz križovatky pre auto, pripravený raz pre každý manéver. */
+    private fun junctionIcon(step: online.virivky.amap.nav.RouteStep): CarIcon? {
+        val key = step to carContext.isDarkMode
+        if (junctionFor != key) {
+            junctionFor = key
+            junction = JunctionView.bitmap(step, 480, 300, carContext.isDarkMode)?.let {
+                CarIcon.Builder(IconCompat.createWithBitmap(it.copy(Bitmap.Config.RGB_565, false))).build()
+            }
+        }
+        return junction
     }
 
     private fun actionStrip(): ActionStrip {
