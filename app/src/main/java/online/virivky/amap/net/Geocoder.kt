@@ -41,10 +41,19 @@ object Geocoder {
         val area = if (near == null && options.area == SearchArea.NEARBY) SearchArea.WORLD else options.area
         var places = find(text, near, area, typeahead)
         var note: String? = null
-        // V okolí nič – skúsime ďalej (napr. hľadanie iného mesta).
-        if (places.isEmpty() && area == SearchArea.NEARBY && !typeahead) {
-            places = find(text, near, SearchArea.WORLD, false)
-            if (places.isNotEmpty()) note = "V okolí 50 km sa nič nenašlo, výsledky sú z väčšej diaľky."
+        // V okolí nič, alebo len podobné názvy (Pavlova Ves pri „Dulová Ves“) – hľadáme aj ďalej,
+        // napr. iné mesto či obec; presné zhody z diaľky idú pred podobné z okolia.
+        val words = words(text)
+        if (area == SearchArea.NEARBY && !typeahead && places.none { matchesAll(it, words) }) {
+            val wider = find(text, near, SearchArea.WORLD, false)
+            val exact = wider.filter { matchesAll(it, words) }
+            if (places.isEmpty()) {
+                places = wider
+                if (wider.isNotEmpty()) note = "V okolí 50 km sa nič nenašlo, výsledky sú z väčšej diaľky."
+            } else if (exact.isNotEmpty()) {
+                places = exact + places.filter { p -> exact.none { Geo.distance(it.point, p.point) < 50 } }
+                note = "V okolí 50 km nič presne nesedí, presné zhody sú z väčšej diaľky."
+            }
         }
         if (options.openNow) {
             val open = places.filter { it.open == true }
@@ -94,12 +103,17 @@ object Geocoder {
      */
     private fun order(places: List<Place>, text: String, near: GeoPoint?, sort: SearchSort): List<Place> {
         if (sort == SearchSort.RELEVANCE || near == null) return places
-        val words = normalize(text).split(' ').filter { it.length >= 2 }
-        fun strong(p: Place): Boolean {
-            val hay = normalize(p.name + " " + p.address + " " + p.kind)
-            return words.all { hay.contains(it) }
-        }
-        return places.sortedWith(compareBy<Place>({ !strong(it) }, { Geo.distance(near, it.point) }))
+        val words = words(text)
+        return places.sortedWith(compareBy<Place>({ !matchesAll(it, words) }, { Geo.distance(near, it.point) }))
+    }
+
+    /** Hľadané slová bez diakritiky (aspoň 2 znaky). */
+    private fun words(text: String) = normalize(text).split(' ').filter { it.length >= 2 }
+
+    /** Miesto obsahuje všetky hľadané slová (v názve, adrese či druhu). */
+    private fun matchesAll(p: Place, words: List<String>): Boolean {
+        val hay = normalize(p.name + " " + p.address + " " + p.kind)
+        return words.all { hay.contains(it) }
     }
 
     private fun normalize(s: String): String =
