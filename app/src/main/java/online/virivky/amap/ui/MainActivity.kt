@@ -631,30 +631,73 @@ class MainActivity : Activity() {
             .show()
     }
 
-    /** Uloženie miesta ako Domov či Práca (a odstránenie z nedávnych). */
+    /**
+     * Uloženie miesta: hore názov na prepísanie (označený, s klávesnicou), pod ním kam uložiť –
+     * Moje miesta (pod týmto názvom), Domov, Práca; pri nedávnych aj odstránenie zo zoznamu.
+     */
     private fun savePlaceDialog(place: Place, fromRecents: Boolean = false) {
-        val items = mutableListOf("Uložiť ako Domov", "Uložiť ako Prácu", "Uložiť do Mojich miest")
-        if (fromRecents) items += "Odstrániť z nedávnych"
-        AlertDialog.Builder(this)
-            .setTitle(place.name)
-            .setItems(items.toTypedArray()) { _, which ->
-                when (which) {
-                    0, 1 -> {
-                        val kind = if (which == 0) Favorites.Kind.HOME else Favorites.Kind.WORK
-                        Favorites.set(kind, place)
-                        Toast.makeText(this, "Uložené: ${kind.label}", Toast.LENGTH_SHORT).show()
-                    }
-                    2 -> askName("Uložiť do Mojich miest", place.name) { name ->
-                        val saved = SavedPlaces.add(name, place.point)
-                        Toast.makeText(this, "Uložené do Mojich miest: ${saved.name}", Toast.LENGTH_SHORT).show()
-                    }
-                    3 -> {
-                        Recents.remove(place)
-                        adapter.places = Recents.all()
-                    }
+        val d = resources.displayMetrics.density
+        val pad = (20 * d).toInt()
+        val input = EditText(this).apply {
+            setSingleLine()
+            setText(place.name)
+            hint = "Názov miesta"
+            imeOptions = EditorInfo.IME_ACTION_DONE
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+        }
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(pad, pad / 2, pad, 0)
+            addView(input, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        }
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Uložiť miesto")
+            .setView(layout)
+            .setNegativeButton("Zrušiť", null)
+            .create()
+        fun name() = input.text.toString().trim().ifEmpty { place.name }
+        fun toMyPlaces() {
+            val saved = SavedPlaces.add(name(), place.point)
+            Toast.makeText(this, "Uložené do Mojich miest: ${saved.name}", Toast.LENGTH_SHORT).show()
+        }
+        val ripple = android.util.TypedValue().also { theme.resolveAttribute(android.R.attr.selectableItemBackground, it, true) }
+        fun option(label: String, action: () -> Unit) {
+            layout.addView(TextView(this).apply {
+                text = label
+                textSize = 17f
+                setTextColor(getColor(R.color.panel_text))
+                setPadding(0, (14 * d).toInt(), 0, (14 * d).toInt())
+                setBackgroundResource(ripple.resourceId)
+                setOnClickListener {
+                    action()
+                    dialog.dismiss()
                 }
+            })
+        }
+        option("★  Uložiť do Mojich miest") { toMyPlaces() }
+        for (kind in Favorites.Kind.entries) {
+            option(if (kind == Favorites.Kind.HOME) "Uložiť ako Domov" else "Uložiť ako Prácu") {
+                Favorites.set(kind, place)
+                Toast.makeText(this, "Uložené: ${kind.label}", Toast.LENGTH_SHORT).show()
             }
-            .show()
+        }
+        if (fromRecents) {
+            option("Odstrániť z nedávnych") {
+                Recents.remove(place)
+                adapter.places = Recents.all()
+            }
+        }
+        // „Hotovo“ na klávesnici uloží do Mojich miest.
+        input.setOnEditorActionListener { _, action, _ ->
+            if (action != EditorInfo.IME_ACTION_DONE) return@setOnEditorActionListener false
+            toMyPlaces()
+            dialog.dismiss()
+            true
+        }
+        dialog.window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE)
+        dialog.show()
+        input.requestFocus()
+        input.selectAll()
     }
 
     /**
