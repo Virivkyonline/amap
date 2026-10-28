@@ -2,7 +2,10 @@
 
 Vlastná navigácia pre Android, ktorá funguje aj v **Android Auto**.
 
-- mapa OpenStreetMap v telefóne aj na obrazovke auta (v noci tmavá)
+- vektorová mapa v štýle AMap v telefóne aj na obrazovke auta: tmavomodrá v noci,
+  pri jazde tmavý asfalt so svetlými okrajmi, zelená trasa so šípkami, auto s kompasom, 3D budovy
+- čierny panel s odbočkou a pruhmi, rýchlosť v kruhu, limit pri názve ulice,
+  spodná lišta s časom, km, počtom semaforov a časom príchodu
 - vyhľadanie adresy alebo miesta, nedávne ciele
 - výpočet trasy autom a navigácia odbočka po odbočke
 - slovenské hlasové pokyny, automatický prepočet trasy pri zídení z cesty
@@ -66,14 +69,14 @@ Android Auto štandardne zobrazuje len aplikácie z Google Play. Pre vlastnú ap
 
 | Časť | Služba |
 |------|--------|
-| mapové dlaždice | tile.openstreetmap.org |
+| mapa (vektorové dlaždice, písma) | OpenFreeMap (tiles.openfreemap.org), vykresľuje MapLibre |
 | vyhľadávanie | Nominatim (nominatim.openstreetmap.org) |
 | výpočet trasy, jazdné pruhy | OSRM (router.project-osrm.org) |
-| rýchlostné limity, radary | Overpass API (overpass-api.de) |
+| rýchlostné limity, radary, semafory | Overpass API (overpass-api.de) |
 | hlas | prevod textu na reč v telefóne (slovenčina, inak čeština) |
 
 Sú to bezplatné verejné služby OpenStreetMap určené na bežné osobné použitie.
-Aplikácia potrebuje mobilné dáta; navštívené časti mapy si pamätá týždeň.
+Aplikácia potrebuje mobilné dáta; navštívené časti mapy si pamätá (do 50 MB).
 Nezobrazuje dopravné zápchy. Limity, pruhy a radary sú len tam, kde ich má
 OpenStreetMap zakreslené (na hlavných cestách väčšinou áno) a zatiaľ sa ukazujú len počas navigácie.
 
@@ -82,14 +85,15 @@ Nastavenia → Systém → Jazyky → Prevod textu na reč → Google → Inšta
 
 ## Vývoj
 
-Projekt je v Kotline, bez ďalších knižníc okrem
-[Android for Cars App Library](https://developer.android.com/training/cars/apps).
+Projekt je v Kotline. Knižnice: [Android for Cars App Library](https://developer.android.com/training/cars/apps)
+a [MapLibre Native](https://maplibre.org/) na vykreslenie mapy. Grafika (štýl mapy, ikony) je vlastná,
+kreslená v kóde – vzhľad je len inšpirovaný aplikáciou AMap.
 
 ```
 app/src/main/java/online/virivky/amap/
   car/       obrazovky pre Android Auto (mapa, hľadanie, náhľad trasy)
   ui/        aplikácia v mobile
-  map/       kreslenie mapy z dlaždíc (spoločné pre auto aj mobil)
+  map/       štýl mapy, ikony, ovládanie kamery a panely nad mapou (spoločné pre auto aj mobil)
   nav/       trasa, navigácia, hlasové pokyny
   net/       vyhľadávanie a výpočet trasy
   location/  GPS

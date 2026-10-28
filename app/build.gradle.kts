@@ -19,6 +19,11 @@ android {
         targetSdk = 35
         versionCode = buildNumber
         versionName = "1.0.$buildNumber"
+
+        // Mobily a autá používajú ARM; x86 knižnice mapy by len zväčšili APK.
+        ndk {
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+        }
     }
 
     signingConfigs {
@@ -61,4 +66,6 @@ dependencies {
     implementation("androidx.car.app:app:1.7.0")
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.lifecycle:lifecycle-common:2.6.2")
+    // Vektorová mapa (OpenGL variant – funguje aj pri kreslení na obrazovku auta).
+    implementation("org.maplibre.gl:android-sdk-opengl:13.7.1")
 }

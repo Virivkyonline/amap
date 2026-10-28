@@ -31,7 +31,7 @@ class MapScreen(carContext: CarContext, private val map: CarMapSurface) : Screen
         val builder = NavigationTemplate.Builder()
             .setActionStrip(actionStrip())
             .setMapActionStrip(mapActionStrip())
-            .setPanModeListener { inPanMode -> if (inPanMode) map.follower.follow = false }
+            .setPanModeListener { inPanMode -> if (inPanMode) map.onPanMode() }
 
         when (nav.phase) {
             Phase.NAVIGATING -> {

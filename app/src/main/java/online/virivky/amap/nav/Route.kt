@@ -61,6 +61,42 @@ class Route(
     @Volatile
     var cameras: List<Camera> = emptyList()
 
+    /** Vzdialenosti semaforov od začiatku trasy. Dopĺňajú sa dodatočne. */
+    @Volatile
+    var trafficSignals: DoubleArray = DoubleArray(0)
+
+    fun alongAtIndex(index: Int) = cumulative[index.coerceIn(0, points.size - 1)]
+
+    fun stepAlong(stepIndex: Int) = alongAt(steps[stepIndex.coerceIn(0, steps.size - 1)])
+
+    /** Bod na trase vo vzdialenosti [along] od začiatku. */
+    fun pointAt(along: Double): GeoPoint {
+        if (along <= 0) return points.first()
+        if (along >= distance) return points.last()
+        var lo = 0
+        var hi = points.size - 1
+        while (hi - lo > 1) {
+            val mid = (lo + hi) / 2
+            if (cumulative[mid] <= along) lo = mid else hi = mid
+        }
+        val len = cumulative[hi] - cumulative[lo]
+        val t = if (len > 0) (along - cumulative[lo]) / len else 0.0
+        return Geo.interpolate(points[lo], points[hi], t)
+    }
+
+    /** Časť trasy medzi dvoma vzdialenosťami od začiatku. */
+    fun slice(from: Double, to: Double): List<GeoPoint> {
+        val start = from.coerceIn(0.0, distance)
+        val end = to.coerceIn(start, distance)
+        val result = ArrayList<GeoPoint>()
+        result.add(pointAt(start))
+        for (i in points.indices) {
+            if (cumulative[i] > start && cumulative[i] < end) result.add(points[i])
+        }
+        result.add(pointAt(end))
+        return result
+    }
+
     init {
         for (i in 1 until points.size) {
             cumulative[i] = cumulative[i - 1] + Geo.distance(points[i - 1], points[i])

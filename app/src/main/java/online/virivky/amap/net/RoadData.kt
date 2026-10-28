@@ -19,7 +19,7 @@ object RoadData {
     )
     private const val CHUNK = 4000
 
-    class Result(val speedLimits: IntArray, val cameras: List<Camera>)
+    class Result(val speedLimits: IntArray, val cameras: List<Camera>, val trafficSignals: DoubleArray)
 
     fun fetch(route: Route): Result? {
         val nodeIds = route.nodeIds ?: return null
@@ -29,11 +29,13 @@ object RoadData {
         // (a, b) -> limit pre jazdu z bodu a do bodu b
         val limits = HashMap<Pair<Long, Long>, Int>()
         val cameraCandidates = ArrayList<Pair<GeoPoint, Int?>>()
+        val signalIds = HashSet<Long>()
         for (chunk in unique.chunked(CHUNK)) {
             val query = "[out:json][timeout:60];" +
                 "node(id:${chunk.joinToString(",")})->.r;" +
                 "way(bn.r)[highway][~\"^maxspeed\"~\".\"];out body;" +
-                "node(around.r:40)[highway=speed_camera];out;"
+                "node(around.r:40)[highway=speed_camera];out;" +
+                "node.r[highway=traffic_signals];out tags;"
             val elements = JSONObject(post(query)).optJSONArray("elements") ?: continue
             for (i in 0 until elements.length()) {
                 val e = elements.getJSONObject(i)
@@ -51,9 +53,12 @@ object RoadData {
                             backward?.let { limits[b to a] = it }
                         }
                     }
-                    "node" -> cameraCandidates.add(
-                        GeoPoint(e.getDouble("lat"), e.getDouble("lon")) to parseMaxspeed(tags.optString("maxspeed"))
-                    )
+                    "node" -> when (tags.optString("highway")) {
+                        "speed_camera" -> cameraCandidates.add(
+                            GeoPoint(e.getDouble("lat"), e.getDouble("lon")) to parseMaxspeed(tags.optString("maxspeed"))
+                        )
+                        "traffic_signals" -> signalIds.add(e.getLong("id"))
+                    }
                 }
             }
         }
@@ -68,7 +73,13 @@ object RoadData {
                 if (list.isEmpty() || camera.along - list.last().along > 30) list.add(camera)
                 list
             }
-        return Result(speedLimits, cameras)
+        val signals = nodeIds.indices
+            .filter { nodeIds[it] in signalIds }
+            .map { route.alongAtIndex(it) }
+            .distinct()
+            .sorted()
+            .toDoubleArray()
+        return Result(speedLimits, cameras, signals)
     }
 
     private fun post(query: String): String {

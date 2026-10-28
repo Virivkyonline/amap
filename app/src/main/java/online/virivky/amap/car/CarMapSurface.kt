@@ -1,129 +1,168 @@
 package online.virivky.amap.car
 
+import android.app.Presentation
 import android.graphics.Rect
+import android.hardware.display.DisplayManager
+import android.hardware.display.VirtualDisplay
 import android.location.Location
-import android.view.Surface
+import android.view.ViewGroup
+import android.widget.FrameLayout
 import androidx.car.app.AppManager
 import androidx.car.app.CarContext
 import androidx.car.app.SurfaceCallback
 import androidx.car.app.SurfaceContainer
 import online.virivky.amap.location.LocationTracker
-import online.virivky.amap.map.MapFollower
-import online.virivky.amap.map.MapRenderer
-import online.virivky.amap.map.TileCache
+import online.virivky.amap.map.DriveHud
+import online.virivky.amap.map.NavMap
 import online.virivky.amap.nav.NavigationController
-import online.virivky.amap.util.Bg
-import kotlin.math.ln
+import org.maplibre.android.maps.MapLibreMapOptions
+import org.maplibre.android.maps.MapView
 
-/** Kreslenie mapy na plochu, ktorú poskytuje Android Auto. */
+/**
+ * Mapa na obrazovke auta: Android Auto poskytne plochu (Surface), na ktorú cez
+ * virtuálny displej zobrazíme rovnakú vektorovú mapu ako v telefóne.
+ */
 class CarMapSurface(private val carContext: CarContext) : SurfaceCallback {
-    val renderer = MapRenderer()
-    val follower = MapFollower(renderer)
-
-    private var surface: Surface? = null
+    private var display: VirtualDisplay? = null
+    private var presentation: Presentation? = null
+    private var mapView: MapView? = null
+    private var hud: DriveHud? = null
+    private var navMap: NavMap? = null
+    private val visibleArea = Rect()
     private var width = 0
     private var height = 0
-    private var renderPosted = false
+    private var dark = carContext.isDarkMode
 
-    private val tileListener: () -> Unit = { requestRender() }
-    private val locationListener: (Location) -> Unit = { requestRender() }
-    private val navigationListener = NavigationController.Listener { requestRender() }
+    private val navigationListener = NavigationController.Listener { refresh() }
+    private val locationListener: (Location) -> Unit = { refresh() }
 
     fun attach() {
-        renderer.darkMode = carContext.isDarkMode
+        dark = carContext.isDarkMode
         carContext.getCarService(AppManager::class.java).setSurfaceCallback(this)
-        TileCache.addListener(tileListener)
-        LocationTracker.addListener(locationListener)
         NavigationController.addListener(navigationListener)
+        LocationTracker.addListener(locationListener)
     }
 
     fun detach() {
-        TileCache.removeListener(tileListener)
-        LocationTracker.removeListener(locationListener)
         NavigationController.removeListener(navigationListener)
-        surface = null
+        LocationTracker.removeListener(locationListener)
+        release()
     }
 
     fun setDarkMode(dark: Boolean) {
-        renderer.darkMode = dark
-        requestRender()
+        this.dark = dark
+        navMap?.setDark(dark)
     }
 
     fun zoomIn() {
-        renderer.zoomBy(1.0)
-        requestRender()
+        navMap?.zoomIn()
     }
 
     fun zoomOut() {
-        renderer.zoomBy(-1.0)
-        requestRender()
+        navMap?.zoomOut()
     }
 
     fun recenter() {
-        follower.recenter()
-        requestRender()
+        navMap?.recenter()
+    }
+
+    /** Používateľ prepol do režimu posúvania mapy. */
+    fun onPanMode() {
+        navMap?.stopFollowing()
+    }
+
+    private fun refresh() {
+        navMap?.update()
+        hud?.invalidate()
     }
 
     override fun onSurfaceAvailable(surfaceContainer: SurfaceContainer) {
-        surface = surfaceContainer.surface
+        release()
+        val surface = surfaceContainer.surface ?: return
         width = surfaceContainer.width
         height = surfaceContainer.height
-        renderer.pixelScale = (surfaceContainer.dpi / 160f * 1.15f).coerceIn(1f, 3f)
-        requestRender()
+        if (width <= 0 || height <= 0) return
+        val manager = carContext.getSystemService(DisplayManager::class.java) ?: return
+        val virtual = manager.createVirtualDisplay(
+            "amap-car", width, height, surfaceContainer.dpi, surface, 0,
+        ) ?: return
+        display = virtual
+
+        val screen = Presentation(carContext, virtual.display)
+        val context = screen.context
+        val options = MapLibreMapOptions.createFromAttributes(context)
+            .textureMode(true)
+            .logoEnabled(false)
+            .attributionEnabled(false)
+            .compassEnabled(false)
+        val map = MapView(context, options)
+        map.onCreate(null)
+        val overlay = DriveHud(context).apply { showAttribution = true }
+        overlay.viewport.set(visibleArea)
+        val root = FrameLayout(context)
+        root.addView(map, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        root.addView(overlay, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        screen.setContentView(root)
+        try {
+            screen.show()
+        } catch (e: Exception) {
+            map.onDestroy()
+            virtual.release()
+            display = null
+            return
+        }
+        map.onStart()
+        map.onResume()
+        presentation = screen
+        mapView = map
+        hud = overlay
+        map.getMapAsync { maplibre ->
+            if (mapView !== map) return@getMapAsync
+            navMap = NavMap(context, maplibre, dark).also {
+                it.setViewport(effectiveArea(), width, height)
+            }
+        }
     }
 
+    private fun effectiveArea() = if (visibleArea.isEmpty) Rect(0, 0, width, height) else Rect(visibleArea)
+
     override fun onVisibleAreaChanged(visibleArea: Rect) {
-        renderer.viewport.set(visibleArea)
-        requestRender()
+        this.visibleArea.set(visibleArea)
+        hud?.viewport?.set(visibleArea)
+        hud?.invalidate()
+        navMap?.setViewport(effectiveArea(), width, height)
     }
 
     override fun onStableAreaChanged(stableArea: Rect) {}
 
     override fun onSurfaceDestroyed(surfaceContainer: SurfaceContainer) {
-        surface = null
+        release()
     }
 
     override fun onScroll(distanceX: Float, distanceY: Float) {
-        follower.follow = false
-        renderer.panBy(distanceX, distanceY)
-        requestRender()
+        navMap?.scrollBy(distanceX, distanceY)
     }
 
     override fun onFling(velocityX: Float, velocityY: Float) {}
 
     override fun onScale(focusX: Float, focusY: Float, scaleFactor: Float) {
-        if (scaleFactor <= 0f) return
-        val delta = ln(scaleFactor.toDouble()) / ln(2.0)
-        if (follower.follow || focusX < 0 || focusY < 0) renderer.zoomBy(delta)
-        else renderer.zoomBy(delta, focusX, focusY)
-        requestRender()
+        navMap?.scaleBy(focusX, focusY, scaleFactor)
     }
 
     override fun onClick(x: Float, y: Float) {}
 
-    fun requestRender() {
-        if (renderPosted) return
-        renderPosted = true
-        Bg.main.post {
-            renderPosted = false
-            render()
+    private fun release() {
+        navMap = null
+        mapView?.let {
+            it.onPause()
+            it.onStop()
+            it.onDestroy()
         }
-    }
-
-    private fun render() {
-        val s = surface ?: return
-        if (!s.isValid || width == 0 || height == 0) return
-        renderer.setSize(width, height)
-        follower.sync(fitPaddingPx = 32f * renderer.pixelScale)
-        val canvas = try {
-            s.lockCanvas(null)
-        } catch (e: Exception) {
-            return
-        } ?: return
-        try {
-            renderer.draw(canvas, width, height)
-        } finally {
-            s.unlockCanvasAndPost(canvas)
-        }
+        mapView = null
+        hud = null
+        presentation?.dismiss()
+        presentation = null
+        display?.release()
+        display = null
     }
 }

@@ -4,16 +4,22 @@ import android.Manifest
 import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.graphics.Rect
 import android.location.Location
 import android.os.Build
 import android.os.Bundle
+import android.text.SpannableString
+import android.text.Spanned
+import android.text.style.AbsoluteSizeSpan
+import android.text.style.ForegroundColorSpan
 import android.view.KeyEvent
 import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.widget.Button
 import android.widget.EditText
+import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.ListView
 import android.widget.TextView
@@ -23,7 +29,8 @@ import online.virivky.amap.data.Place
 import online.virivky.amap.data.Recents
 import online.virivky.amap.geo.GeoPoint
 import online.virivky.amap.location.LocationTracker
-import online.virivky.amap.map.TileCache
+import online.virivky.amap.map.DriveHud
+import online.virivky.amap.map.NavMap
 import online.virivky.amap.nav.Instructions
 import online.virivky.amap.nav.LaneIcons
 import online.virivky.amap.nav.ManeuverIcons
@@ -32,51 +39,105 @@ import online.virivky.amap.nav.NavigationController.Phase
 import online.virivky.amap.net.Geocoder
 import online.virivky.amap.util.Bg
 import online.virivky.amap.util.GeoUri
+import org.maplibre.android.maps.MapView
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 class MainActivity : Activity() {
     private val nav = NavigationController
-    private lateinit var map: MapView
+    private lateinit var mapView: MapView
+    private var navMap: NavMap? = null
+    private lateinit var hud: DriveHud
+    private lateinit var overlay: View
     private lateinit var searchBar: View
     private lateinit var searchInput: EditText
     private lateinit var results: ListView
     private lateinit var instructionCard: View
     private lateinit var maneuverIcon: ImageView
     private lateinit var maneuverDistance: TextView
-    private lateinit var maneuverText: TextView
     private lateinit var maneuverRoad: TextView
+    private lateinit var maneuverText: TextView
     private lateinit var lanesImage: ImageView
+    private lateinit var mapControls: View
+    private lateinit var zoomIn: View
+    private lateinit var zoomOut: View
+    private lateinit var myLocation: View
     private lateinit var bottomPanel: View
     private lateinit var panelTitle: TextView
     private lateinit var panelSubtitle: TextView
     private lateinit var primaryButton: Button
     private lateinit var secondaryButton: Button
+    private lateinit var navBar: View
+    private lateinit var navSummary: TextView
+    private lateinit var navLightsIcon: View
+    private lateinit var navLights: TextView
+    private lateinit var navArrival: TextView
+    private lateinit var navVoice: ImageButton
     private val adapter = PlaceAdapter()
 
     private val navigationListener = NavigationController.Listener { render() }
-    private val tileListener: () -> Unit = { map.invalidate() }
-    private val locationListener: (Location) -> Unit = { map.invalidate() }
+    private val locationListener: (Location) -> Unit = {
+        navMap?.update()
+        hud.invalidate()
+    }
+
+    private val isDark: Boolean
+        get() = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-        map = findViewById(R.id.map)
+        mapView = findViewById(R.id.map)
+        hud = findViewById(R.id.hud)
+        overlay = findViewById(R.id.overlay)
         searchBar = findViewById(R.id.search_bar)
         searchInput = findViewById(R.id.search_input)
         results = findViewById(R.id.results)
         instructionCard = findViewById(R.id.instruction_card)
         maneuverIcon = findViewById(R.id.maneuver_icon)
         maneuverDistance = findViewById(R.id.maneuver_distance)
-        maneuverText = findViewById(R.id.maneuver_text)
         maneuverRoad = findViewById(R.id.maneuver_road)
+        maneuverText = findViewById(R.id.maneuver_text)
         lanesImage = findViewById(R.id.lanes_image)
+        mapControls = findViewById(R.id.map_controls)
+        zoomIn = findViewById(R.id.zoom_in)
+        zoomOut = findViewById(R.id.zoom_out)
+        myLocation = findViewById(R.id.my_location)
         bottomPanel = findViewById(R.id.bottom_panel)
         panelTitle = findViewById(R.id.panel_title)
         panelSubtitle = findViewById(R.id.panel_subtitle)
         primaryButton = findViewById(R.id.primary_button)
         secondaryButton = findViewById(R.id.secondary_button)
+        navBar = findViewById(R.id.nav_bar)
+        navSummary = findViewById(R.id.nav_summary)
+        navLightsIcon = findViewById(R.id.nav_lights_icon)
+        navLights = findViewById(R.id.nav_lights)
+        navArrival = findViewById(R.id.nav_arrival)
+        navVoice = findViewById(R.id.nav_voice)
+        hud.showAttribution = true
+
+        mapView.onCreate(savedInstanceState)
+        mapView.getMapAsync { map ->
+            navMap = NavMap(this, map, isDark).also { controller ->
+                controller.onFollowChanged = { render() }
+                map.addOnMapLongClickListener { latLng ->
+                    choose(
+                        Place(
+                            "Vybrané miesto",
+                            String.format(Locale.US, "%.5f, %.5f", latLng.latitude, latLng.longitude),
+                            GeoPoint(latLng.latitude, latLng.longitude),
+                        )
+                    )
+                    true
+                }
+                map.addOnMapClickListener {
+                    hideKeyboard()
+                    false
+                }
+            }
+            updateViewport()
+        }
 
         results.adapter = adapter
         results.setOnItemClickListener { _, _, position, _ -> choose(adapter.getItem(position)) }
@@ -89,7 +150,6 @@ class MainActivity : Activity() {
             }
             true
         }
-
         searchInput.setOnEditorActionListener { _, actionId, event ->
             if (actionId == EditorInfo.IME_ACTION_SEARCH || event?.keyCode == KeyEvent.KEYCODE_ENTER) {
                 search()
@@ -102,25 +162,17 @@ class MainActivity : Activity() {
             if (hasFocus && searchInput.text.isBlank()) showPlaces(Recents.all())
         }
         findViewById<View>(R.id.search_button).setOnClickListener { search() }
-        findViewById<View>(R.id.zoom_in).setOnClickListener {
-            map.renderer.zoomBy(1.0)
-            map.invalidate()
+        zoomIn.setOnClickListener { navMap?.zoomIn() }
+        zoomOut.setOnClickListener { navMap?.zoomOut() }
+        myLocation.setOnClickListener { navMap?.recenter() }
+        findViewById<View>(R.id.nav_close).setOnClickListener { nav.stop() }
+        navVoice.setOnClickListener {
+            nav.voiceEnabled = !nav.voiceEnabled
+            render()
         }
-        findViewById<View>(R.id.zoom_out).setOnClickListener {
-            map.renderer.zoomBy(-1.0)
-            map.invalidate()
-        }
-        findViewById<View>(R.id.my_location).setOnClickListener {
-            map.follower.recenter()
-            map.invalidate()
-        }
-        map.onLongPress = { point ->
-            choose(Place("Vybrané miesto", String.format(Locale.US, "%.5f, %.5f", point.lat, point.lon), point))
-        }
-        map.onUserMoved = { hideKeyboard() }
 
         // Mapa sa centruje do voľnej plochy medzi hornými a dolnými panelmi.
-        findViewById<View>(R.id.overlay).addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> updateViewport() }
+        overlay.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> updateViewport() }
 
         requestPermissionsIfNeeded()
         handleIntent(intent)
@@ -128,19 +180,44 @@ class MainActivity : Activity() {
 
     override fun onStart() {
         super.onStart()
+        mapView.onStart()
         LocationTracker.acquire(this)
         LocationTracker.addListener(locationListener)
-        TileCache.addListener(tileListener)
         nav.addListener(navigationListener)
         render()
     }
 
+    override fun onResume() {
+        super.onResume()
+        mapView.onResume()
+    }
+
+    override fun onPause() {
+        mapView.onPause()
+        super.onPause()
+    }
+
     override fun onStop() {
         nav.removeListener(navigationListener)
-        TileCache.removeListener(tileListener)
         LocationTracker.removeListener(locationListener)
         LocationTracker.release(this)
+        mapView.onStop()
         super.onStop()
+    }
+
+    override fun onDestroy() {
+        mapView.onDestroy()
+        super.onDestroy()
+    }
+
+    override fun onLowMemory() {
+        super.onLowMemory()
+        mapView.onLowMemory()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        mapView.onSaveInstanceState(outState)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -164,8 +241,7 @@ class MainActivity : Activity() {
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         LocationTracker.refresh()
-        map.follower.recenter()
-        map.invalidate()
+        navMap?.recenter()
     }
 
     private fun requestPermissionsIfNeeded() {
@@ -229,13 +305,23 @@ class MainActivity : Activity() {
     }
 
     private fun updateViewport() {
-        val top = if (instructionCard.visibility == View.VISIBLE) instructionCard.bottom else searchBar.bottom
-        val bottom = if (bottomPanel.visibility == View.VISIBLE) bottomPanel.top else map.height
-        val viewport = Rect(0, top, map.width, bottom)
-        if (viewport != map.renderer.viewport && viewport.height() > 0) {
-            map.renderer.viewport.set(viewport)
-            map.invalidate()
+        val top = when {
+            instructionCard.visibility == View.VISIBLE -> instructionCard.bottom
+            searchBar.visibility == View.VISIBLE -> searchBar.bottom
+            else -> overlay.paddingTop
         }
+        val bottom = when {
+            navBar.visibility == View.VISIBLE -> navBar.top
+            bottomPanel.visibility == View.VISIBLE -> bottomPanel.top
+            else -> overlay.height - overlay.paddingBottom
+        }
+        val area = Rect(0, top, mapView.width, bottom)
+        if (area.height() <= 0) return
+        if (area != hud.viewport) {
+            hud.viewport.set(area)
+            hud.invalidate()
+        }
+        navMap?.setViewport(area, mapView.width, mapView.height)
     }
 
     private fun render() {
@@ -243,8 +329,13 @@ class MainActivity : Activity() {
         val navigating = phase == Phase.NAVIGATING || phase == Phase.ARRIVED
         searchBar.visibility = if (navigating) View.GONE else View.VISIBLE
         instructionCard.visibility = if (navigating) View.VISIBLE else View.GONE
-        bottomPanel.visibility = if (phase == Phase.IDLE) View.GONE else View.VISIBLE
-        secondaryButton.visibility = View.VISIBLE
+        navBar.visibility = if (navigating) View.VISIBLE else View.GONE
+        bottomPanel.visibility = if (phase == Phase.ROUTING || phase == Phase.PREVIEW) View.VISIBLE else View.GONE
+        val following = navMap?.follow ?: true
+        zoomIn.visibility = if (navigating) View.GONE else View.VISIBLE
+        zoomOut.visibility = if (navigating) View.GONE else View.VISIBLE
+        myLocation.visibility = if (navigating && following) View.GONE else View.VISIBLE
+        mapControls.visibility = if (zoomIn.visibility == View.GONE && myLocation.visibility == View.GONE) View.GONE else View.VISIBLE
         primaryButton.isEnabled = true
 
         when (phase) {
@@ -277,31 +368,25 @@ class MainActivity : Activity() {
             }
             Phase.NAVIGATING, Phase.ARRIVED -> {
                 renderInstruction()
-                val p = nav.progress
-                panelTitle.text = if (phase == Phase.ARRIVED) {
-                    "Ste v cieli"
-                } else if (p != null) {
-                    "Príchod " + LocalTime.now().plusSeconds(p.remainingSeconds.toLong())
-                        .format(DateTimeFormatter.ofPattern("H:mm"))
-                } else {
-                    "Navigácia"
-                }
-                panelSubtitle.text = if (p != null && phase == Phase.NAVIGATING) {
-                    "${Instructions.displayDuration(p.remainingSeconds)} · ${Instructions.displayDistance(p.remainingDistance)}"
-                } else {
-                    nav.destination?.name
-                }
-                primaryButton.text = "Ukončiť"
-                primaryButton.setOnClickListener { nav.stop() }
-                secondaryButton.text = if (nav.voiceEnabled) "Zvuk: zap." else "Zvuk: vyp."
-                secondaryButton.setOnClickListener {
-                    nav.voiceEnabled = !nav.voiceEnabled
-                    render()
-                }
+                renderNavBar()
             }
         }
-        map.invalidate()
+        navMap?.update()
+        hud.invalidate()
         updateViewport()
+    }
+
+    /** Veľké číslo vzdialenosti s menšou sivou jednotkou (ako „113 m“). */
+    private fun distanceText(meters: Double): CharSequence {
+        val text = Instructions.displayDistance(meters)
+        val split = text.lastIndexOf(' ')
+        if (split < 0) return text
+        val result = SpannableString(text)
+        val unitStart = split + 1
+        result.setSpan(AbsoluteSizeSpan(30, true), unitStart, text.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        result.setSpan(ForegroundColorSpan(getColor(R.color.nav_text_secondary)), unitStart, text.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        result.setSpan(AbsoluteSizeSpan(14, true), split, unitStart, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        return result
     }
 
     private fun renderInstruction() {
@@ -310,26 +395,47 @@ class MainActivity : Activity() {
         lanesImage.visibility = View.GONE
         if (nav.phase == Phase.ARRIVED) {
             maneuverIcon.setImageResource(R.drawable.ic_place)
-            maneuverDistance.text = "Cieľ"
-            maneuverText.text = "Ste v cieli"
-            maneuverRoad.text = nav.destination?.name
+            maneuverDistance.text = ""
+            maneuverRoad.text = "Ste v cieli"
+            maneuverText.text = nav.destination?.name
             return
         }
         if (route == null || p == null || nav.rerouting) {
             maneuverIcon.setImageDrawable(null)
             maneuverDistance.text = ""
-            maneuverText.text = if (nav.rerouting) "Prepočítavam trasu…" else "Čakám na GPS…"
-            maneuverRoad.text = ""
+            maneuverRoad.text = if (nav.rerouting) "Prepočítavam trasu…" else "Čakám na GPS…"
+            maneuverText.text = ""
             return
         }
         val step = route.steps[p.nextStepIndex]
         maneuverIcon.setImageBitmap(ManeuverIcons.bitmap(step))
-        maneuverDistance.text = Instructions.displayDistance(p.distanceToNextStep)
-        maneuverText.text = Instructions.title(step)
-        maneuverRoad.text = Instructions.road(step).orEmpty()
+        maneuverDistance.text = distanceText(p.distanceToNextStep)
+        val road = Instructions.road(step)
+        maneuverRoad.text = road ?: Instructions.title(step)
+        maneuverText.text = if (road != null) Instructions.title(step) else ""
+        maneuverText.visibility = if (maneuverText.text.isNullOrEmpty()) View.GONE else View.VISIBLE
         if (LaneIcons.useful(step.lanes) && p.distanceToNextStep < 1000) {
             lanesImage.setImageBitmap(LaneIcons.bitmap(step.lanes, step.modifier))
             lanesImage.visibility = View.VISIBLE
         }
+    }
+
+    private fun renderNavBar() {
+        val p = nav.progress
+        navVoice.setImageResource(if (nav.voiceEnabled) R.drawable.ic_volume_up else R.drawable.ic_volume_off)
+        if (nav.phase == Phase.ARRIVED || p == null) {
+            navSummary.text = if (nav.phase == Phase.ARRIVED) "Ste v cieli" else "Navigácia"
+            navLightsIcon.visibility = View.GONE
+            navLights.visibility = View.GONE
+            navArrival.text = nav.destination?.name
+            return
+        }
+        navSummary.text = "${Instructions.displayDuration(p.remainingSeconds)}  ${Instructions.displayDistance(p.remainingDistance)}"
+        val lights = nav.trafficLightsAhead
+        navLightsIcon.visibility = if (lights > 0) View.VISIBLE else View.GONE
+        navLights.visibility = navLightsIcon.visibility
+        navLights.text = lights.toString()
+        val arrival = LocalTime.now().plusSeconds(p.remainingSeconds.toLong()).format(DateTimeFormatter.ofPattern("HH:mm"))
+        navArrival.text = "$arrival Príchod"
     }
 }

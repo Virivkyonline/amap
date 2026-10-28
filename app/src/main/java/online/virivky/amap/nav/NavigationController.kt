@@ -63,6 +63,31 @@ object NavigationController {
     var cameraDistance: Double? = null
         private set
 
+    /** Názov cesty, po ktorej práve ideme. */
+    val currentRoad: String?
+        get() {
+            val r = route ?: return null
+            val p = progress ?: return null
+            val step = r.steps[(p.nextStepIndex - 1).coerceAtLeast(0)]
+            return listOf(step.name, step.ref).firstOrNull { it.isNotBlank() }
+        }
+
+    /** Počet semaforov do cieľa. */
+    val trafficLightsAhead: Int
+        get() {
+            val r = route ?: return 0
+            val traveled = progress?.traveled ?: 0.0
+            return r.trafficSignals.count { it > traveled + 5 }
+        }
+
+    /** Prejdená časť trasy 0..1. */
+    val progressFraction: Float
+        get() {
+            val r = route ?: return 0f
+            val p = progress ?: return 0f
+            return if (r.distance > 0) (p.traveled / r.distance).toFloat().coerceIn(0f, 1f) else 0f
+        }
+
     val overSpeed: Boolean
         get() {
             val limit = speedLimit ?: return false
@@ -177,6 +202,7 @@ object NavigationController {
             val data = result.getOrNull() ?: return@run
             r.speedLimits = data.speedLimits
             r.cameras = data.cameras
+            r.trafficSignals = data.trafficSignals
             val location = LocationTracker.last
             val p = progress
             if (phase == Phase.NAVIGATING && location != null && p != null) updateRoadInfo(r, p, location)
