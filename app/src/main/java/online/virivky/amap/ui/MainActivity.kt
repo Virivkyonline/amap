@@ -80,6 +80,7 @@ import java.time.LocalTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlin.math.roundToInt
 
 class MainActivity : Activity() {
     private val nav = NavigationController
@@ -1373,7 +1374,16 @@ class MainActivity : Activity() {
             navArrival.text = nav.destination?.name
             return
         }
-        navSummary.text = "${Instructions.displayDuration(p.remainingSeconds)}  ${Instructions.displayDistance(p.remainingDistance)}"
+        // Krátko ako AMap („1h24min 147 km“) a pri dlhom texte menšie písmo, aby sa jednotka neodsekla.
+        val minutes = maxOf(1, (p.remainingSeconds / 60).roundToInt())
+        val time = if (minutes < 60) "$minutes min" else "${minutes / 60}h${minutes % 60}min"
+        val summary = "$time  ${Instructions.displayDistance(p.remainingDistance)}"
+        navSummary.textSize = when {
+            summary.length > 15 -> 19f
+            summary.length > 13 -> 21f
+            else -> 23f
+        }
+        navSummary.text = summary
         val lights = nav.trafficLightsAhead
         navLightsIcon.visibility = if (lights > 0) View.VISIBLE else View.GONE
         navLights.visibility = navLightsIcon.visibility
