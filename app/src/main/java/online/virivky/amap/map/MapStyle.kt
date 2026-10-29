@@ -118,6 +118,16 @@ object MapStyle {
     private fun meters(prop: String) =
         """["interpolate",["exponential",2],["zoom"],15,["*",["get","$prop"],0.632],22,["*",["get","$prop"],80.9]]"""
 
+    /**
+     * Čiarová vrstva trasy ešte raz pre zdroj „route-near“ (kúsok trasy od auta, prekresľovaný na každej snímke),
+     * hneď za pôvodnou, aby boli všetky okraje trasy pod všetkými čiarami. Pre iné vrstvy null.
+     */
+    private fun nearCopy(layer: String): String? {
+        if (!layer.contains(""""type":"line","source":"route"""")) return null
+        return layer.replace(""""source":"route"""", """"source":"route-near"""")
+            .replaceFirst(Regex(""""id":"([^"]+)""""), """"id":"$1-near"""")
+    }
+
     private fun linear(vararg stops: Pair<Number, Number>) =
         """["interpolate",["linear"],["zoom"],${stops.joinToString(",") { "${it.first},${it.second}" }}]"""
 
@@ -512,7 +522,7 @@ object MapStyle {
               "tiles":["https://api.tomtom.com/traffic/map/4/tile/flow/$style/{z}/{x}/{y}.png?key=$key&tileSize=512&thickness=8"]}"""
         }
         val sources = listOf(
-            "route", "alternatives", "route-labels", "incidents", "incident-lines", "lanes", "lane-marks", "crossings", "arrow", "arrowhead", "cameras",
+            "route", "route-near", "alternatives", "route-labels", "incidents", "incident-lines", "lanes", "lane-marks", "crossings", "arrow", "arrowhead", "cameras",
             "signals", "pois", "via",
             "destination", "saved", "me",
         )
@@ -522,6 +532,6 @@ object MapStyle {
         return """{"version":8,"name":"amap-${if (dark) "night" else "day"}",
             "glyphs":"https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf",
             "sources":{"omt":{"type":"vector","url":"https://tiles.openfreemap.org/planet"},$sources},
-            "layers":[${layers.joinToString(",")}]}"""
+            "layers":[${layers.flatMap { listOf(it) + listOfNotNull(nearCopy(it)) }.joinToString(",")}]}"""
     }
 }

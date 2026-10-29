@@ -45,6 +45,7 @@ import org.json.JSONObject
 import kotlin.math.abs
 import kotlin.math.ln
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.roundToInt
 
 /**
@@ -78,7 +79,14 @@ class NavMap(
     private var wasNavigating = false
     private var fittedRoute: Route? = null
     private var shownRoute: Route? = null
-    private var shownSegment = -1
+    /**
+     * Trasa sa kreslí na dve časti: od auta po [routeCut] (zdroj „route-near“, na každej snímke, takže
+     * začiatok trasy ide plynulo s autom) a od [routeCut] ďalej (zdroj „route“, len raz za ~40 m).
+     */
+    private var routeCut: Double? = null
+    private var routeLanes: LaneView? = null
+    private var routeFoot = false
+    private var nearAlong = Double.NaN
     private var shownArrowKey = ""
     private var shownCameras: Any? = null
     private var shownSignals: Any? = null
@@ -143,6 +151,7 @@ class NavMap(
             }
             flowStep = (flowStep + 1) % FLOW.size
             layer.setProperties(PropertyFactory.lineDasharray(FLOW[flowStep]))
+            style?.getLayerAs<LineLayer>("route-flow-near")?.setProperties(PropertyFactory.lineDasharray(FLOW[flowStep]))
             Bg.main.postDelayed(this, FLOW_FRAME_MS)
         }
     }
@@ -231,7 +240,7 @@ class NavMap(
         map.setStyle(builder) { loaded ->
             style = loaded
             shownRoute = null
-            shownSegment = -1
+            nearAlong = Double.NaN
             shownArrowKey = ""
             shownCameras = null
             shownSignals = null
@@ -381,16 +390,19 @@ class NavMap(
         meCompass = navigating
         if (target == null) {
             s.getSourceAs<GeoJsonSource>("me")?.setGeoJson(EMPTY)
-        } else if (motion.moveTo(SystemClock.uptimeMillis(), target, heading, if (snapped != null) route else null, snapped?.traveled)) {
+        } else if (motion.moveTo(
+                SystemClock.uptimeMillis(), target, heading, if (snapped != null) route else null, snapped?.traveled,
+                // Pri odhade bez GPS (tunel) je poloha už „teraz“; pešo stačí poloha z GPS (smer je z kompasu).
+                speed = if (location != null && location.hasSpeed() && !nav.estimating && !walking) location.speed.toDouble() else 0.0,
+                ageMs = location?.let { (SystemClock.elapsedRealtimeNanos() - it.elapsedRealtimeNanos) / 1_000_000 }?.coerceIn(0L, 2000L) ?: 0L,
+            )
+        ) {
             startFrames()
         }
         drawMe()
         val me = shownMe() ?: target
 
-        // Trasa – počas jazdy len zostávajúca časť od (zobrazeného) auta.
         val shownAlong = motion.along?.takeIf { snapped != null && motion.onRoute === route }
-        val headAlong = shownAlong ?: snapped?.traveled
-        val segment = if (navigating) headAlong?.let { route?.progressAt(it)?.segmentIndex } ?: 0 else -1
 
         val step = if (navigating && route != null && progress != null) route.steps[progress.nextStepIndex] else null
         // Pred manévrom s pruhmi: vozovka rozdelená na pruhy, trasa a auto v správnych pruhoch (ako v AMap).
@@ -410,22 +422,7 @@ class NavMap(
         }
         val lanes = laneView
 
-        if (route !== shownRoute || segment != shownSegment || snapped != null || lanes !== shownLaneView) {
-            s.getSourceAs<GeoJsonSource>("route")?.setGeoJson(
-                if (route == null) EMPTY else routeFeatures(route, headAlong ?: 0.0, nav.travelMode == TravelMode.FOOT)
-            )
-            shownRoute = route
-            shownSegment = segment
-            // Svetlý žiar na prvých metroch trasy pred autom.
-            s.getSourceAs<GeoJsonSource>("route-head")?.setGeoJson(
-                if (route != null && progress != null && navigating && nav.travelMode != TravelMode.FOOT) {
-                    val from = shownAlong ?: progress.traveled
-                    lineString(pathOf(route, from, from + 30))
-                } else {
-                    EMPTY
-                }
-            )
-        }
+        drawRoute()
 
         // Šípka najbližšieho manévru.
         val showArrow = step != null && progress!!.distanceToNextStep < 1000 &&
@@ -710,6 +707,45 @@ class NavMap(
         return result
     }
 
+    /** Poloha zobrazeného auta na trase (vzdialenosť od začiatku), ak počas navigácie ide po trase. */
+    private fun routeAlong(route: Route): Double? {
+        if (!isNavigating()) return null
+        val p = NavigationController.progress?.takeIf { it.offRouteDistance < 30 } ?: return null
+        return motion.along?.takeIf { motion.onRoute === route } ?: p.traveled
+    }
+
+    /** Trasa pred autom (počas jazdy len zostávajúca časť) a svetlý žiar na jej prvých metroch. */
+    private fun drawRoute() {
+        val s = style ?: return
+        val nav = NavigationController
+        val route = nav.route
+        val foot = nav.travelMode == TravelMode.FOOT
+        val along = route?.let { routeAlong(it) }
+        val cut = routeCut
+        val far = route !== shownRoute || laneView !== routeLanes || foot != routeFoot || (along == null) != (cut == null) ||
+            (along != null && cut != null && (along > cut - 10 || along < cut - CUT_AHEAD - 20))
+        if (far) {
+            routeCut = along?.let { it + CUT_AHEAD }
+            s.getSourceAs<GeoJsonSource>("route")?.setGeoJson(
+                if (route == null) EMPTY else routeFeatures(route, routeCut ?: 0.0, route.distance, foot)
+            )
+            shownRoute = route
+            routeLanes = laneView
+            routeFoot = foot
+        }
+        val to = routeCut
+        if (route != null && along != null && to != null) {
+            if (!far && abs(along - nearAlong) < 0.2) return
+            s.getSourceAs<GeoJsonSource>("route-near")?.setGeoJson(routeFeatures(route, along, to, foot))
+            s.getSourceAs<GeoJsonSource>("route-head")?.setGeoJson(if (foot) EMPTY else lineString(pathOf(route, along, along + 30)))
+            nearAlong = along
+        } else if (!nearAlong.isNaN() || far) {
+            s.getSourceAs<GeoJsonSource>("route-near")?.setGeoJson(EMPTY)
+            s.getSourceAs<GeoJsonSource>("route-head")?.setGeoJson(EMPTY)
+            nearAlong = Double.NaN
+        }
+    }
+
     /** Kompas beží len pešo počas navigácie a kým je mapa vidieť. */
     private fun updateCompass(walking: Boolean) {
         val want = useCompass && walking && flowEnabled && !disposed
@@ -931,6 +967,7 @@ class NavMap(
         lastFrameAt = now
         var moving = motion.step(now)
         drawMe()
+        drawRoute()
         val me = shownMe()
         if (follow && me != null && width > 0 && height > 0) {
             val navigating = isNavigating()
@@ -983,19 +1020,21 @@ class NavMap(
     }
 
     /**
-     * Trasa od [from] rozdelená na úseky podľa premávky (vlastnosť „level“ určuje farbu). V pohľade na pruhy
+     * Trasa medzi [from] a [to] rozdelená na úseky podľa premávky (vlastnosť „level“ určuje farbu). V pohľade na pruhy
      * ju po stop čiaru nahrádzajú zelené pruhy; za stop čiarou pokračuje zo správneho pruhu.
      */
-    private fun routeFeatures(route: Route, from: Double, foot: Boolean): String {
+    private fun routeFeatures(route: Route, from: Double, to: Double, foot: Boolean): String {
         val features = ArrayList<String>()
-        val v = laneView?.takeIf { it.route === route && from < it.end }
+        val v = laneView?.takeIf { it.route === route && from < it.end && to > it.start }
         if (v == null) {
-            addRoute(route, from, route.distance, foot, features)
+            addRoute(route, from, to, foot, features)
         } else {
-            addRoute(route, from, v.start, foot, features)
-            val exit = pathOf(route, max(from, v.stop), v.end)
-            if (exit.size >= 2) features.add(feature(exit, route.segmentTraffic.getOrElse(route.progressAt(v.end).segmentIndex) { 0 }, foot))
-            addRoute(route, v.end, route.distance, foot, features)
+            addRoute(route, from, min(to, v.start), foot, features)
+            if (to > v.stop) {
+                val exit = pathOf(route, max(from, v.stop), min(to, v.end))
+                if (exit.size >= 2) features.add(feature(exit, route.segmentTraffic.getOrElse(route.progressAt(v.end).segmentIndex) { 0 }, foot))
+            }
+            addRoute(route, max(from, v.end), to, foot, features)
         }
         return """{"type":"FeatureCollection","features":[${features.joinToString(",")}]}"""
     }
@@ -1005,7 +1044,14 @@ class NavMap(
         val levels = route.segmentTraffic
         var current = ArrayList<GeoPoint>()
         var level = -1
-        for (i in 0 until route.points.size - 1) {
+        // Prvý úsek, ktorý končí za [from] (trasa môže mať tisíce bodov a časť pri aute sa kreslí na každej snímke).
+        var lo = 0
+        var hi = route.points.size - 1
+        while (hi - lo > 1) {
+            val mid = (lo + hi) / 2
+            if (route.alongAtIndex(mid) <= from) lo = mid else hi = mid
+        }
+        for (i in lo until route.points.size - 1) {
             val a = route.alongAtIndex(i)
             val b = route.alongAtIndex(i + 1)
             if (b <= from) continue
@@ -1039,6 +1085,9 @@ class NavMap(
             arrayOf(0f, 3f, 3f, 1f), arrayOf(0f, 3.5f, 3f, 0.5f),
         )
         private const val FLOW_FRAME_MS = 60L
+
+        /** Dĺžka časti trasy pred autom, ktorá sa kreslí na každej snímke (najviac, kým sa celá trasa neprekreslí). */
+        private const val CUT_AHEAD = 50.0
 
         /** Po koľkých ms bez dotyku sa mapa počas navigácie vráti na polohu. */
         private const val RECENTER_MS = 10_000L

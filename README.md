@@ -35,6 +35,8 @@ Vlastná navigácia **lech-map** pre Android, ktorá funguje aj v **Android Auto
 - **priechody pre chodcov** (zebry z OpenStreetMap) pri priblížení mapy: biele pruhy cez celú cestu, nakreslené
   nad zelenou trasou aj nad pruhmi (trasa ich neprekrýva)
 - počas navigácie sa mapa po posunutí prstom (aj náhodnom dotyku) po 10 s sama vráti na polohu
+- auto na mape nezaostáva za skutočnou polohou: ide tam, kde podľa rýchlosti práve je (GPS meria raz
+  za sekundu a s oneskorením), a zelená trasa začína plynulo pri aute (kúsok pri aute sa kreslí na každej snímke)
 - zelená trasa ostáva **vnútri cesty** (pri priblížení sa cesta rozširuje, trasa má tmavú stredovú
   medzeru a žlté stredové čiary cesty sú nad ňou)
 - **obraz križovatky** pred zjazdom, rozdvojením a kruhovým objazdom: nakreslený pohľad na cestu

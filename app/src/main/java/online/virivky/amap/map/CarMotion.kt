@@ -7,9 +7,10 @@ import kotlin.math.abs
 import kotlin.math.exp
 
 /**
- * Plynulý pohyb auta na mape. Poloha z GPS prichádza raz za sekundu; auto sa medzi dvoma polohami
- * posúva rovnomerne po snímkach (na trase po jej tvare, mimo trasy priamo) a otáča sa postupne,
- * takže neskáče. Zobrazená poloha je o jeden interval GPS pozadu, aby auto nikdy necúvalo.
+ * Plynulý pohyb auta na mape. Poloha z GPS prichádza raz za sekundu a je o chvíľu staršia; auto sa
+ * po snímkach posúva rovnomerne tam, kde podľa rýchlosti bude pri ďalšej polohe (na trase po jej tvare,
+ * mimo trasy priamo), takže neskáče ani nezaostáva. Dozadu sa posunie len postojačky (keď predpoveď
+ * prestrelila pri brzdení), inak auto nikdy necúva.
  */
 class CarMotion {
     private var route: Route? = null
@@ -50,26 +51,35 @@ class CarMotion {
     }
 
     /**
-     * Nová poloha. [route] a [routeAlong] = poloha na trase (počas navigácie), inak null.
+     * Nová poloha. [route] a [routeAlong] = poloha na trase (počas navigácie), inak null. [speed] = rýchlosť
+     * v m/s z GPS (0 = nepredpovedať), [ageMs] = ako dávno bola poloha zmeraná.
      * Vráti true, ak sa začal nový pohyb (treba kresliť snímky).
      */
-    fun moveTo(now: Long, point: GeoPoint, heading: Double?, route: Route?, routeAlong: Double?): Boolean {
+    fun moveTo(
+        now: Long, point: GeoPoint, heading: Double?, route: Route?, routeAlong: Double?,
+        speed: Double = 0.0, ageMs: Long = 0,
+    ): Boolean {
         targetHeading = heading
         if (point.lat == target?.lat && point.lon == target?.lon && route === this.route) return false
         target = point
         val shown = this.point
         val interval = (now - lastTargetMs).coerceIn(MIN_MS, MAX_MS)
         lastTargetMs = now
+        // Koľko auto prejde od merania polohy po teraz a po ďalšiu polohu (o jeden interval).
+        val moving = speed >= MIN_SPEED
+        val nowAhead = if (moving) minOf(speed * ageMs / 1000.0, MAX_LEAD_M) else 0.0
+        val nextAhead = if (moving) minOf(speed * (ageMs + interval) / 1000.0, MAX_LEAD_M) else 0.0
         val shownAlong = along
         if (route != null && routeAlong != null) {
+            val wanted = minOf(routeAlong + nextAhead, route.distance)
             if (route === this.route && shownAlong != null && abs(routeAlong - shownAlong) < JUMP_M) {
-                // Po trase; malý posun dozadu (nepresnosť GPS) ignorujeme, auto len zastane.
                 fromAlong = shownAlong
-                toAlong = maxOf(routeAlong, shownAlong)
+                // Malý posun dozadu (nepresnosť GPS) ignorujeme, auto len zastane; postojačky sa vráti na miesto.
+                toAlong = if (wanted >= shownAlong || (!moving && shownAlong - wanted > BACK_M)) wanted else shownAlong
             } else {
                 // Nová trasa alebo veľký skok: hneď na miesto.
-                fromAlong = routeAlong
-                toAlong = routeAlong
+                fromAlong = minOf(routeAlong + nowAhead, route.distance)
+                toAlong = wanted
             }
             this.route = route
             along = fromAlong
@@ -78,8 +88,9 @@ class CarMotion {
         } else {
             this.route = null
             along = null
+            val ahead = if (heading != null && nextAhead > 0) Geo.offset(point, heading - 90, nextAhead) else point
             from = if (shown != null && Geo.distance(shown, point) < JUMP_M) shown else point
-            to = point
+            to = ahead
         }
         startMs = now
         durationMs = interval
@@ -130,6 +141,12 @@ class CarMotion {
         const val MAX_MS = 1500L
         /** Väčší skok (nová trasa, prvá poloha) sa neanimuje. */
         const val JUMP_M = 400.0
+        /** Pod touto rýchlosťou (m/s) sa poloha nepredpovedá (šum GPS postojačky). */
+        const val MIN_SPEED = 0.8
+        /** Predpoveď najviac o toľko metrov (výpadok GPS, stará poloha). */
+        const val MAX_LEAD_M = 60.0
+        /** Postojačky sa auto vráti dozadu, ak ho predpoveď pri brzdení posunula ďalej o viac ako toľko metrov. */
+        const val BACK_M = 1.5
         /** Časová konštanta otáčania auta. */
         const val TURN_MS = 220.0
     }
