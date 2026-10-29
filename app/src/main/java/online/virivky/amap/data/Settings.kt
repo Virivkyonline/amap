@@ -29,6 +29,14 @@ object Settings {
             listeners.forEach { it() }
         }
 
+    /** Letecká mapa: fotky zhora (ortofotomozaika SR) pod cestami a trasou. */
+    var aerialMap: Boolean
+        get() = prefs.getBoolean("aerial_map", false)
+        set(value) {
+            prefs.edit().putBoolean("aerial_map", value).apply()
+            listeners.forEach { it() }
+        }
+
     /** Hlasové upozornenia: radary a úsekové merania, dopravné udalosti, prekročenie rýchlosti. */
     var warnCameras: Boolean
         get() = prefs.getBoolean("warn_cameras", true)

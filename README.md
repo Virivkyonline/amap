@@ -6,6 +6,9 @@ Vlastná navigácia **lech-map** pre Android, ktorá funguje aj v **Android Auto
   pri jazde tmavý asfalt so svetlými okrajmi, zelená trasa so šípkami, auto s kompasom, 3D budovy
 - čierny panel s odbočkou a pruhmi, rýchlosť v kruhu, limit pri názve ulice,
   spodná lišta s časom, km, počtom semaforov a časom príchodu
+- **letecká mapa** (tlačidlo s vrstvami pri tlačidlách mapy alebo v nastaveniach): skutočné fotky zhora
+  (ortofotomozaika SR od GKÚ a NLC) pod trasou; cesty z mapy pri priblížení zmiznú, chodníky ostanú,
+  v noci je fotka stlmená; len na Slovensku, inde ostane kreslená mapa; spotrebuje viac mobilných dát
 - vyhľadanie adresy alebo miesta naraz v **TomTom aj OpenStreetMap** (Photon – zvládne aj preklepy
   a chýbajúcu diakritiku), návrhy počas písania aj bez kľúča TomTom
 - čo nájdeš v **Google Mapách**, pošli cez **Zdieľať → lech-map** – apka zistí polohu z odkazu
@@ -144,6 +147,7 @@ sa služby hľadajú v OpenStreetMap – nájdu sa tiež, len bez obsadenosti na
   a miesta na mape. Mimo navigácie ťuk na miesto = trasa k nemu; počas navigácie sa
   pridá ako zastávka. Zastávku zrušíš v Službách tlačidlom **Zrušiť zastávku**.
 - tlačidlá na mape: posun, priblížiť, oddialiť, späť na moju polohu
+- leteckú mapu zapneš v mobile (tlačidlo s vrstvami); platí aj na obrazovke auta
 - reproduktor – vypnutie/zapnutie hlasu
 
 ## Ako to funguje
@@ -151,6 +155,7 @@ sa služby hľadajú v OpenStreetMap – nájdu sa tiež, len bez obsadenosti na
 | Časť | Služba |
 |------|--------|
 | mapa (vektorové dlaždice, písma) | OpenFreeMap (tiles.openfreemap.org), vykresľuje MapLibre |
+| letecká mapa | ortofotomozaika SR (© GKÚ, NLC) z dlaždíc Freemap Slovakia (ofmozaika.tiles.freemap.sk) |
 | vyhľadávanie, adresa bodu | TomTom Search (s kľúčom), inak Nominatim (nominatim.openstreetmap.org) |
 | výpočet trasy, jazdné pruhy | TomTom (s kľúčom, podľa premávky), inak OSRM (router.project-osrm.org) |
 | farby premávky na cestách | TomTom Traffic Flow (s kľúčom) |

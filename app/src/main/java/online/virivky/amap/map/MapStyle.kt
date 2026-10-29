@@ -1,5 +1,8 @@
 package online.virivky.amap.map
 
+import org.json.JSONArray
+import org.json.JSONObject
+
 /**
  * Vlastný štýl vektorovej mapy (dáta OpenStreetMap cez OpenFreeMap).
  * Nočné farby sú inšpirované tmavomodrým vzhľadom navigácie AMap.
@@ -119,6 +122,44 @@ object MapStyle {
         """["interpolate",["exponential",2],["zoom"],15,["*",["get","$prop"],0.632],22,["*",["get","$prop"],80.9]]"""
 
     /**
+     * Ortofotomozaika SR (GKÚ Bratislava a Národné lesnícke centrum, zadarmo s uvedením zdroja) v dlaždiciach
+     * Web Mercator zo servera Freemap Slovakia – rovnaký zdroj ponúka editorom OpenStreetMap. Mimo Slovenska
+     * fotky nie sú a ostáva kreslená mapa.
+     */
+    private const val AERIAL_TILES = "https://ofmozaika.tiles.freemap.sk/{z}/{x}/{y}.jpg"
+    const val AERIAL_CREDIT = "© GKÚ, NLC"
+
+    /**
+     * Vrstvy pre leteckú mapu: fotky nad kreslenými plochami (tie ostanú mimo Slovenska), 3D domy preč
+     * (strechy sú na fotke), cesty pri priblížení postupne zmiznú, chodníky a trasa ostanú.
+     */
+    private fun aerialLayers(layers: List<String>, dark: Boolean): List<String> {
+        val photo = """{"id":"aerial","type":"raster","source":"aerial","minzoom":8,
+            "paint":{"raster-opacity":${linear(8 to 0, 9 to 1)},"raster-fade-duration":150""" +
+            // V noci tlmene, aby fotka neoslňovala.
+            (if (dark) ""","raster-brightness-max":0.55,"raster-saturation":-0.2""" else "") + "}}"
+        val result = ArrayList<String>()
+        for (layer in layers) {
+            val o = JSONObject(layer)
+            val id = o.getString("id")
+            if (id == "building-3d") continue
+            if (o.optString("source-layer") == "transportation" && o.optString("type") == "line" && id != "path" && id != "rail") {
+                if (id.contains("center-line") || id.contains("lane-divider")) {
+                    (o.optJSONObject("layout") ?: JSONObject().also { o.put("layout", it) }).put("visibility", "none")
+                } else {
+                    (o.optJSONObject("paint") ?: JSONObject().also { o.put("paint", it) })
+                        .put("line-opacity", JSONArray(linear(12 to 0.9, 15 to 0.5, 16.5 to 0)))
+                }
+                result.add(o.toString())
+            } else {
+                result.add(layer)
+            }
+            if (id == "building") result.add(photo)
+        }
+        return result
+    }
+
+    /**
      * Čiarová vrstva trasy ešte raz pre zdroj „route-near“ (kúsok trasy od auta, prekresľovaný na každej snímke),
      * hneď za pôvodnou, aby boli všetky okraje trasy pod všetkými čiarami. Pre iné vrstvy null.
      */
@@ -147,8 +188,9 @@ object MapStyle {
 
     /**
      * [trafficKey] = kľúč TomTom; ak je zadaný, na cesty sa prekreslí živá premávka.
+     * [aerial] = letecká mapa: fotky zhora namiesto kreslených plôch, cesty pri priblížení zmiznú (vidieť ich na fotke).
      */
-    fun json(dark: Boolean, trafficKey: String? = null): String {
+    fun json(dark: Boolean, trafficKey: String? = null, aerial: Boolean = false): String {
         val c = if (dark) NIGHT else DAY
         // Od priblíženia 17 majú cesty skutočnú šírku (diaľnica 11 m na smer, hlavná 10 m, vedľajšia 8 m,
         // miestna 6,5 m, obslužná 4 m) a s každým stupňom sa zdvojnásobujú – ako v AMap pri jazde.
@@ -527,11 +569,14 @@ object MapStyle {
             "destination", "saved", "me",
         )
             .joinToString(",") { """"$it":{"type":"geojson","data":$EMPTY}""" } +
-            ""","route-head":{"type":"geojson","lineMetrics":true,"data":$EMPTY}""" + traffic
+            ""","route-head":{"type":"geojson","lineMetrics":true,"data":$EMPTY}""" + traffic +
+            if (aerial) ""","aerial":{"type":"raster","tileSize":256,"minzoom":8,"maxzoom":20,"attribution":"$AERIAL_CREDIT",
+              "tiles":["$AERIAL_TILES"]}""" else ""
+        val all = layers.flatMap { listOf(it) + listOfNotNull(nearCopy(it)) }
 
         return """{"version":8,"name":"amap-${if (dark) "night" else "day"}",
             "glyphs":"https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf",
             "sources":{"omt":{"type":"vector","url":"https://tiles.openfreemap.org/planet"},$sources},
-            "layers":[${layers.flatMap { listOf(it) + listOfNotNull(nearCopy(it)) }.joinToString(",")}]}"""
+            "layers":[${(if (aerial) aerialLayers(all, dark) else all).joinToString(",")}]}"""
     }
 }

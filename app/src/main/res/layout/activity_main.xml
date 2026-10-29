@@ -245,6 +245,17 @@
                 android:layout_marginBottom="@dimen/gap"
                 android:orientation="vertical">
 
+                <ImageButton
+                    android:id="@+id/map_layers"
+                    android:layout_width="@dimen/button"
+                    android:layout_height="@dimen/button"
+                    android:layout_marginBottom="8dp"
+                    android:background="@drawable/round_button_bg"
+                    android:contentDescription="Letecká mapa"
+                    android:elevation="3dp"
+                    android:src="@drawable/ic_layers"
+                    android:tint="@color/panel_text" />
+
                 <TextView
                     android:id="@+id/view_mode"
                     android:layout_width="@dimen/button"

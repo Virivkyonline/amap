@@ -105,6 +105,7 @@ class NavMap(
     private var shownSaved: Any? = null
     private var shownSelected: Route? = null
     private var trafficKey = Settings.trafficLayerKey
+    private var aerial = Settings.aerialMap
     private var vehicle = Settings.vehicleModel to Settings.vehicleColor
 
     /** Plynulý pohyb auta a kamery po snímkach obrazovky (bez skákania raz za sekundu). */
@@ -173,7 +174,7 @@ class NavMap(
         }
         val key = Settings.trafficLayerKey
         val themeChanged = updateTheme(force = true)
-        if (key != trafficKey || themeChanged) {
+        if (key != trafficKey || themeChanged || Settings.aerialMap != aerial) {
             trafficKey = key
             loadStyle()
         } else {
@@ -234,7 +235,8 @@ class NavMap(
 
     private fun loadStyle() {
         style = null
-        val builder = Style.Builder().fromJson(MapStyle.json(dark, trafficKey))
+        aerial = Settings.aerialMap
+        val builder = Style.Builder().fromJson(MapStyle.json(dark, trafficKey, aerial))
         vehicle = Settings.vehicleModel to Settings.vehicleColor
         MapIcons.all(context).forEach { (name, bitmap) -> builder.withImage(name, bitmap) }
         map.setStyle(builder) { loaded ->

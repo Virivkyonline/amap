@@ -100,11 +100,11 @@ class MainActivity : Activity() {
     private lateinit var maneuverText: TextView
     private lateinit var lanesImage: ImageView
     private lateinit var junctionImage: ImageView
-    private lateinit var mapControls: View
     private lateinit var zoomIn: View
     private lateinit var zoomOut: View
     private lateinit var myLocation: View
     private lateinit var viewMode: TextView
+    private lateinit var mapLayers: android.widget.ImageButton
     private lateinit var bottomPanel: View
     private lateinit var panelTitle: TextView
     private lateinit var panelSubtitle: TextView
@@ -187,11 +187,11 @@ class MainActivity : Activity() {
         lanesImage = findViewById(R.id.lanes_image)
         junctionImage = findViewById(R.id.junction_image)
         junctionImage.clipToOutline = true
-        mapControls = findViewById(R.id.map_controls)
         zoomIn = findViewById(R.id.zoom_in)
         zoomOut = findViewById(R.id.zoom_out)
         myLocation = findViewById(R.id.my_location)
         viewMode = findViewById(R.id.view_mode)
+        mapLayers = findViewById(R.id.map_layers)
         bottomPanel = findViewById(R.id.bottom_panel)
         panelTitle = findViewById(R.id.panel_title)
         panelSubtitle = findViewById(R.id.panel_subtitle)
@@ -302,6 +302,12 @@ class MainActivity : Activity() {
         zoomIn.setOnClickListener { navMap?.zoomIn() }
         zoomOut.setOnClickListener { navMap?.zoomOut() }
         myLocation.setOnClickListener { navMap?.recenter() }
+        // Letecká mapa (fotky zhora) a späť na kreslenú.
+        mapLayers.setOnClickListener {
+            Settings.aerialMap = !Settings.aerialMap
+            Toast.makeText(this, if (Settings.aerialMap) "Letecká mapa" else "Kreslená mapa", Toast.LENGTH_SHORT).show()
+            render()
+        }
         viewMode.setOnClickListener {
             val next = Settings.mapPerspective.next()
             Settings.mapPerspective = next
@@ -1090,9 +1096,9 @@ class MainActivity : Activity() {
         myLocation.visibility = if (navigating && following) View.GONE else View.VISIBLE
         viewMode.visibility = if (navigating) View.VISIBLE else View.GONE
         viewMode.text = Settings.mapPerspective.short
-        mapControls.visibility =
-            if (zoomIn.visibility == View.GONE && myLocation.visibility == View.GONE && viewMode.visibility == View.GONE) View.GONE
-            else View.VISIBLE
+        mapLayers.imageTintList = android.content.res.ColorStateList.valueOf(
+            getColor(if (Settings.aerialMap) R.color.amap_blue else R.color.panel_text)
+        )
         primaryButton.isEnabled = true
         if (phase != Phase.NAVIGATING) servicesOpen = false
         updateSearchUi()
@@ -1172,6 +1178,10 @@ class MainActivity : Activity() {
             text = "Zobrazovať premávku na mape"
             isChecked = Settings.showTraffic
         }
+        val aerialMap = CheckBox(this).apply {
+            text = "Letecká mapa (fotky zhora, len Slovensko; viac mobilných dát)"
+            isChecked = Settings.aerialMap
+        }
         val themeLabel = TextView(this).apply {
             text = "Farby mapy"
             textSize = 15f
@@ -1239,6 +1249,7 @@ class MainActivity : Activity() {
             addView(info)
             addView(keyInput)
             addView(showTraffic)
+            addView(aerialMap)
             addView(themeLabel)
             addView(themes)
             addView(vehicleLabel)
@@ -1265,6 +1276,7 @@ class MainActivity : Activity() {
                 Settings.warnSpeed = warnSpeed.isChecked
                 toleranceValues.getOrNull(tolerance.checkedRadioButtonId - 2000)?.let { Settings.speedTolerance = it }
                 Settings.showTraffic = showTraffic.isChecked
+                Settings.aerialMap = aerialMap.isChecked
                 Settings.tomtomKey = key.ifEmpty { null }
                 if (key.isNotEmpty()) {
                     Toast.makeText(this, "Overujem kľúč…", Toast.LENGTH_SHORT).show()
