@@ -30,6 +30,9 @@ object LocationTracker {
     var heading: Float? = null
         private set
 
+    /** Poloha, z ktorej sa naposledy určil smer. */
+    private var headingFrom: Location? = null
+
     fun init(context: Context) {
         app = context.applicationContext
     }
@@ -118,11 +121,19 @@ object LocationTracker {
         } else if (now - lastGpsAt < 10_000) {
             return // máme čerstvé GPS, sieťová poloha je horšia
         }
-        val previous = last
         if (location.hasBearing() && location.hasSpeed() && location.speed > 1.5f) {
             heading = location.bearing
-        } else if (previous != null && location.accuracy < 30f && previous.distanceTo(location) > 8f) {
-            heading = (previous.bearingTo(location) + 360f) % 360f
+            headingFrom = location
+        } else if (location.accuracy < 30f) {
+            // Pomaly (pešo ~1 m za sekundu) smer z posunu od miesta, kde sa naposledy určil – nie od
+            // predošlej polohy spred sekundy, od ktorej sa za ten čas takmer nepohneme.
+            val from = headingFrom?.takeIf { now - it.elapsedRealtimeNanos / 1_000_000 < 30_000 }
+            if (from == null) {
+                headingFrom = location
+            } else if (from.distanceTo(location) > maxOf(8f, location.accuracy)) {
+                heading = (from.bearingTo(location) + 360f) % 360f
+                headingFrom = location
+            }
         }
         last = location
         listeners.forEach { it(location) }

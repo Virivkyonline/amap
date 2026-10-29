@@ -310,6 +310,29 @@ object MapStyle {
                 "paint":{"line-color":"${if (dark) "#1d5c4a" else "#178a64"}","line-opacity":0.85,
                   "line-width":["interpolate",["exponential",2],["zoom"],17,1.3,22,42]}}"""
             )
+            // Pruhy pred manévrom (pohľad na pruhy): nad trasou, ale pod čiarami cesty a priechodmi pre chodcov,
+            // ktoré idú cez celú cestu. Posuny do strany sú už v tvare čiar (NavMap), preto bez line-offset.
+            add(
+                """{"id":"lanes-surface","type":"line","source":"lanes","minzoom":15,"filter":["==",["get","k"],"surface"],
+                "layout":{"line-cap":"butt","line-join":"round"},
+                "paint":{"line-color":"${c.asphaltNear ?: "#9AA1AE"}","line-width":${meters("w")}}}"""
+            )
+            add(
+                """{"id":"lanes-good","type":"line","source":"lanes","minzoom":15,"filter":["==",["get","k"],"good"],
+                "layout":{"line-cap":"butt","line-join":"round"},
+                "paint":{"line-color":"${c.route}","line-opacity":0.95,"line-width":${meters("w")}}}"""
+            )
+            add(
+                """{"id":"lanes-sep","type":"line","source":"lanes","minzoom":15,"filter":["==",["get","k"],"sep"],
+                "layout":{"line-cap":"butt","line-join":"round"},
+                "paint":{"line-color":"#FFFFFF","line-opacity":0.9,"line-dasharray":[14,20],
+                  "line-width":${meters("w")}}}"""
+            )
+            add(
+                """{"id":"lanes-edge","type":"line","source":"lanes","minzoom":15,"filter":["==",["get","k"],"edge"],
+                "layout":{"line-cap":"butt","line-join":"round"},
+                "paint":{"line-color":"${c.edgeNear ?: "#6E7586"}","line-width":${meters("w")}}}"""
+            )
             add(
                 """{"id":"route-center-line","type":"line","source":"omt","source-layer":"transportation","minzoom":16,
                 "filter":["all",["match",["get","class"],["primary","secondary","tertiary","minor"],true,false],
@@ -360,38 +383,11 @@ object MapStyle {
                 "paint":{"icon-opacity":0.85}}"""
             )
 
-            // Pruhy pred manévrom (pohľad na pruhy).
-            add(
-                """{"id":"lanes-surface","type":"line","source":"lanes","minzoom":15,"filter":["==",["get","k"],"surface"],
-                "layout":{"line-cap":"butt","line-join":"round"},
-                "paint":{"line-color":"${c.asphaltNear ?: "#9AA1AE"}","line-width":${meters("w")},"line-offset":${meters("o")}}}"""
-            )
-            add(
-                """{"id":"lanes-good","type":"line","source":"lanes","minzoom":15,"filter":["==",["get","k"],"good"],
-                "layout":{"line-cap":"butt","line-join":"round"},
-                "paint":{"line-color":"${c.route}","line-opacity":0.95,"line-width":${meters("w")},"line-offset":${meters("o")}}}"""
-            )
-            add(
-                """{"id":"lanes-sep","type":"line","source":"lanes","minzoom":15,"filter":["==",["get","k"],"sep"],
-                "layout":{"line-cap":"butt","line-join":"round"},
-                "paint":{"line-color":"#FFFFFF","line-opacity":0.9,"line-dasharray":[14,20],
-                  "line-width":${meters("w")},"line-offset":${meters("o")}}}"""
-            )
-            add(
-                """{"id":"lanes-edge","type":"line","source":"lanes","minzoom":15,"filter":["==",["get","k"],"edge"],
-                "layout":{"line-cap":"butt","line-join":"round"},
-                "paint":{"line-color":"${c.edgeNear ?: "#6E7586"}","line-width":${meters("w")},"line-offset":${meters("o")}}}"""
-            )
-            add(
-                """{"id":"lanes-zebra","type":"line","source":"lanes","minzoom":15,"filter":["==",["get","k"],"zebra"],
-                "layout":{"line-cap":"butt","line-join":"round"},
-                "paint":{"line-color":"$zebraColor","line-opacity":0.95,"line-width":${meters("w")},"line-offset":${meters("o")}}}"""
-            )
             add(
                 """{"id":"lane-marks","type":"symbol","source":"lane-marks","minzoom":15,
                 "layout":{"icon-image":["get","icon"],"icon-rotate":["get","bearing"],"icon-rotation-alignment":"map",
                   "icon-pitch-alignment":"map","icon-allow-overlap":true,"icon-ignore-placement":true,
-                  "icon-size":["interpolate",["exponential",2],["zoom"],15,0.092,22,11.7]}}"""
+                  "icon-size":["interpolate",["exponential",2],["zoom"],15,["*",0.092,["get","s"]],22,["*",11.7,["get","s"]]]}}"""
             )
 
             // Popisy ciest a miest.

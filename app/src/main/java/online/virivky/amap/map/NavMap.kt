@@ -18,10 +18,10 @@ import online.virivky.amap.data.Settings
 import online.virivky.amap.data.TrafficEvents
 import online.virivky.amap.geo.Geo
 import online.virivky.amap.geo.GeoPoint
+import online.virivky.amap.location.Compass
 import online.virivky.amap.location.LocationTracker
 import online.virivky.amap.nav.Instructions
 import online.virivky.amap.nav.LaneIcons
-import online.virivky.amap.nav.RouteStep
 import online.virivky.amap.nav.NavigationController
 import online.virivky.amap.nav.NavigationController.Phase
 import online.virivky.amap.nav.Route
@@ -34,8 +34,11 @@ import org.maplibre.android.geometry.LatLngBounds
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.Style
 import org.maplibre.android.style.layers.LineLayer
+import org.maplibre.android.style.layers.Property
 import org.maplibre.android.style.layers.PropertyFactory
 import org.maplibre.android.style.sources.GeoJsonSource
+import org.maplibre.geojson.LineString
+import org.maplibre.geojson.MultiLineString
 import online.virivky.amap.util.Bg
 import online.virivky.amap.util.Sun
 import org.json.JSONObject
@@ -54,6 +57,8 @@ class NavMap(
     dark: Boolean,
     /** V telefóne sa pri automatických farbách riadime slnkom (v aute rozhoduje auto). */
     private val followSun: Boolean = false,
+    /** V telefóne pešo smer podľa kompasu (telefón v ruke); v aute nie. */
+    private val useCompass: Boolean = false,
 ) {
     /** Či mapa sleduje polohu (vypne sa, keď používateľ mapou pohne). */
     var follow = true
@@ -84,6 +89,10 @@ class NavMap(
     private var shownAlternatives: List<Route>? = null
     private var shownIncidents: Any? = null
     private var shownLanes = ""
+    /** Pohľad na pruhy pred najbližším manévrom (null = nie je) a pre ktorý manéver bol zistený. */
+    private var laneView: LaneView? = null
+    private var laneViewKey = ""
+    private var shownLaneView: LaneView? = null
     private var shownCrossings = ""
     private var shownSaved: Any? = null
     private var shownSelected: Route? = null
@@ -108,6 +117,10 @@ class NavMap(
     /** Kamera sa má k autu presunúť plynulo (po zapnutí sledovania), nie skokom. */
     private var catchUp = false
     private var idleWorkAt = 0L
+    /** Kedy používateľ naposledy hýbal mapou (na návrat k polohe počas navigácie). */
+    private var touchedAt = 0L
+    private var compassOn = false
+    private val compassListener: () -> Unit = { if (motion.turnTo(Compass.heading)) startFrames() }
 
     /** Plynutie trasy: posun prerušovanej čiary po krokoch (ako pohyblivá trasa v AMap). */
     private var flowStep = 0
@@ -119,6 +132,7 @@ class NavMap(
         set(value) {
             field = value
             updateFlow()
+            if (!value) updateCompass(false)
         }
     private val flow = object : Runnable {
         override fun run() {
@@ -161,8 +175,7 @@ class NavMap(
 
     private val savedListener = SavedPlaces.Listener { update() }
 
-    // Nové priechody: pri pohľade na pruhy prepočítať aj pruhy (priechody cez ne).
-    private val crossingsListener = Crossings.Listener { if (shownLanes.isNotEmpty()) update() else updateCrossings() }
+    private val crossingsListener = Crossings.Listener { updateCrossings() }
 
     init {
         map.uiSettings.isLogoEnabled = false
@@ -175,6 +188,7 @@ class NavMap(
         map.addOnCameraMoveStartedListener { reason ->
             if (reason == MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE) setFollow(false)
         }
+        map.addOnCameraMoveListener { if (!follow) touchedAt = SystemClock.uptimeMillis() }
         LocationTracker.last?.let {
             map.moveCamera(CameraUpdateFactory.newLatLngZoom(LatLng(it.latitude, it.longitude), 15.0))
         } ?: map.moveCamera(CameraUpdateFactory.newLatLngZoom(LatLng(48.1486, 17.1077), 12.0))
@@ -200,6 +214,7 @@ class NavMap(
     /** Uvoľní mapu (prestane počúvať zmeny nastavení). */
     fun dispose() {
         disposed = true
+        updateCompass(false)
         Bg.main.removeCallbacks(flow)
         if (framing) Choreographer.getInstance().removeFrameCallback(frame)
         framing = false
@@ -226,6 +241,7 @@ class NavMap(
             shownAlternatives = null
             shownIncidents = null
             shownLanes = ""
+            shownLaneView = null
             shownCrossings = ""
             shownSaved = null
             update()
@@ -262,6 +278,7 @@ class NavMap(
     private fun setFollow(value: Boolean) {
         if (follow == value) return
         follow = value
+        if (!value) touchedAt = SystemClock.uptimeMillis()
         if (value) {
             catchUp = true
             freeZoom = map.cameraPosition.zoom.coerceAtLeast(13.0)
@@ -339,6 +356,8 @@ class NavMap(
         }
         val nav = NavigationController
         val navigating = isNavigating()
+        // Počas navigácie sa mapa chvíľu po posunutí prstom sama vráti na polohu (aj po náhodnom dotyku).
+        if (navigating && !follow && SystemClock.uptimeMillis() - touchedAt > RECENTER_MS) setFollow(true)
         val route = nav.route
         val progress = nav.progress
         val location = LocationTracker.last
@@ -346,11 +365,16 @@ class NavMap(
 
         // Moja poloha: počas navigácie auto s kompasom, inak bodka alebo auto podľa smeru.
         // Na trase ide auto po trase a smer berie z jej tvaru; mimo nej poloha a smer z GPS.
-        val heading = (if (nav.estimating) snapped?.segmentBearing ?: LocationTracker.heading
+        // Pešo smer podľa kompasu telefónu (GPS pri chôdzi smer takmer nevie), mapa sa otáča s ním.
+        val walking = navigating && nav.travelMode == TravelMode.FOOT
+        updateCompass(walking)
+        motion.followHeading = walking && Compass.heading != null
+        val movement = (if (nav.estimating) snapped?.segmentBearing ?: LocationTracker.heading
         else LocationTracker.heading ?: snapped?.segmentBearing)?.toDouble()
+        val heading = if (walking) Compass.heading ?: movement else movement
         val target = snapped?.snapped ?: location?.let { GeoPoint(it) }
         meIcon = when {
-            navigating && nav.travelMode == TravelMode.FOOT -> "walker"
+            walking -> "walker"
             heading != null || navigating -> "car"
             else -> "dot"
         }
@@ -361,16 +385,34 @@ class NavMap(
             startFrames()
         }
         drawMe()
-        val me = motion.point ?: target
+        val me = shownMe() ?: target
 
         // Trasa – počas jazdy len zostávajúca časť od (zobrazeného) auta.
         val shownAlong = motion.along?.takeIf { snapped != null && motion.onRoute === route }
-        val head = if (route != null && shownAlong != null) route.progressAt(shownAlong) else snapped
-        val segment = if (navigating) head?.segmentIndex ?: 0 else -1
-        if (route !== shownRoute || segment != shownSegment || snapped != null) {
+        val headAlong = shownAlong ?: snapped?.traveled
+        val segment = if (navigating) headAlong?.let { route?.progressAt(it)?.segmentIndex } ?: 0 else -1
+
+        val step = if (navigating && route != null && progress != null) route.steps[progress.nextStepIndex] else null
+        // Pred manévrom s pruhmi: vozovka rozdelená na pruhy, trasa a auto v správnych pruhoch (ako v AMap).
+        val laneStep = step?.takeIf {
+            progress!!.distanceToNextStep < 600 && LaneIcons.useful(it.lanes) &&
+                it.type !in setOf("roundabout", "rotary", "arrive", "waypoint") && nav.travelMode != TravelMode.FOOT
+        }
+        val viewKey = if (laneStep != null) "${System.identityHashCode(route)}-${progress!!.nextStepIndex}" else ""
+        if (viewKey != laneViewKey) {
+            laneViewKey = viewKey
+            laneView = if (laneStep != null && route != null) {
+                val carAlong = shownAlong ?: progress!!.traveled
+                LaneView.create(route, progress!!.nextStepIndex, laneStep, carAlong, roadAt(route, carAlong))
+            } else {
+                null
+            }
+        }
+        val lanes = laneView
+
+        if (route !== shownRoute || segment != shownSegment || snapped != null || lanes !== shownLaneView) {
             s.getSourceAs<GeoJsonSource>("route")?.setGeoJson(
-                if (route == null) EMPTY
-                else routeFeatures(route, head?.segmentIndex ?: 0, head?.snapped, nav.travelMode == TravelMode.FOOT)
+                if (route == null) EMPTY else routeFeatures(route, headAlong ?: 0.0, nav.travelMode == TravelMode.FOOT)
             )
             shownRoute = route
             shownSegment = segment
@@ -378,7 +420,7 @@ class NavMap(
             s.getSourceAs<GeoJsonSource>("route-head")?.setGeoJson(
                 if (route != null && progress != null && navigating && nav.travelMode != TravelMode.FOOT) {
                     val from = shownAlong ?: progress.traveled
-                    lineString(route.slice(from, from + 30))
+                    lineString(pathOf(route, from, from + 30))
                 } else {
                     EMPTY
                 }
@@ -386,14 +428,13 @@ class NavMap(
         }
 
         // Šípka najbližšieho manévru.
-        val step = if (navigating && route != null && progress != null) route.steps[progress.nextStepIndex] else null
         val showArrow = step != null && progress!!.distanceToNextStep < 1000 &&
             step.type !in setOf("arrive", "depart", "waypoint") && !(step.modifier == "straight" && step.type != "roundabout")
-        val arrowKey = if (showArrow) "${route.hashCode()}-${progress!!.nextStepIndex}" else ""
+        val arrowKey = if (showArrow) "${route.hashCode()}-${progress!!.nextStepIndex}-${System.identityHashCode(lanes)}" else ""
         if (arrowKey != shownArrowKey) {
             if (showArrow) {
                 val along = route!!.stepAlong(progress!!.nextStepIndex)
-                val shaft = route.slice(along - 50, along + 35)
+                val shaft = pathOf(route, along - 50, along + 35)
                 s.getSourceAs<GeoJsonSource>("arrow")?.setGeoJson(lineString(shaft))
                 val end = shaft.last()
                 val before = shaft.getOrNull(shaft.size - 2) ?: end
@@ -406,22 +447,19 @@ class NavMap(
             shownArrowKey = arrowKey
         }
 
-        // Pred manévrom s pruhmi: cesta rozdelená na pruhy, správne zvýraznené (ako v AMap).
-        val laneStep = step?.takeIf {
-            progress!!.distanceToNextStep < 600 && LaneIcons.useful(it.lanes) &&
-                it.type !in setOf("roundabout", "rotary", "arrive", "waypoint")
-        }
-        val lanesKey = if (laneStep != null) "${System.identityHashCode(route)}-${progress!!.nextStepIndex}-${Crossings.version}" else ""
-        if (lanesKey != shownLanes) {
-            if (laneStep != null && route != null) {
-                val (lines, marks) = laneFeatures(route, progress!!.nextStepIndex, laneStep)
+        if (lanes !== shownLaneView) {
+            if (lanes != null) {
+                val (lines, marks) = laneFeatures(lanes)
                 s.getSourceAs<GeoJsonSource>("lanes")?.setGeoJson(lines)
                 s.getSourceAs<GeoJsonSource>("lane-marks")?.setGeoJson(marks)
             } else {
                 s.getSourceAs<GeoJsonSource>("lanes")?.setGeoJson(EMPTY)
                 s.getSourceAs<GeoJsonSource>("lane-marks")?.setGeoJson(EMPTY)
             }
-            shownLanes = lanesKey
+            // Deliace čiary diaľnice z mapy by išli cez naše pruhy.
+            s.getLayer("route-lane-divider")?.setProperties(PropertyFactory.visibility(if (lanes != null) Property.NONE else Property.VISIBLE))
+            shownLaneView = lanes
+            shownLanes = if (lanes != null) viewKey else ""
         }
 
         val cameras = route?.cameras
@@ -571,65 +609,121 @@ class NavMap(
     }
 
     /**
-     * Pruhy pred manévrom: povrch, deliace čiary, okraje a zvýraznené správne pruhy (posun od osi trasy
-     * v metroch rieši mapa), k tomu šípky na pruhoch a červené X na nesprávnych.
+     * Pruhy pred manévrom: povrch, deliace čiary, okraje a zelené správne pruhy, do ktorých trasa plynulo
+     * vojde; k tomu šípky na pruhoch a červené X na nesprávnych. Všetko vnútri cesty, ako ju kreslí mapa.
      */
-    private fun laneFeatures(route: Route, stepIndex: Int, step: RouteStep): Pair<String, String> {
-        val lanes = step.lanes
-        val n = lanes.size
-        val w = 3.5
-        val end = route.stepAlong(stepIndex)
-        val start = max(0.0, end - 320)
-        val coords = route.slice(start, end + 12).joinToString(",") { coord(it) }
-        // Diaľnica či rampa = os trasy je stred jedného smeru; inak sú naše pruhy vpravo od osi cesty.
-        val oneWay = Instructions.isHighway(step) || step.type in setOf("fork", "merge", "on ramp", "off ramp") ||
-            step.ref.startsWith("D") || step.ref.startsWith("R")
-        val left = if (oneWay) -n * w / 2 else 0.0
+    private fun laneFeatures(v: LaneView): Pair<String, String> {
+        val step = v.route.steps[v.stepIndex]
+        val n = v.lanes
+        val w = v.laneWidth
         val lines = ArrayList<String>()
-        fun line(kind: String, width: Double, offset: Double) {
-            lines.add("""{"type":"Feature","properties":{"k":"$kind","w":$width,"o":$offset},"geometry":{"type":"LineString","coordinates":[$coords]}}""")
+        fun line(kind: String, width: Double, points: List<GeoPoint>) {
+            if (points.size < 2) return
+            lines.add("""{"type":"Feature","properties":{"k":"$kind","w":$width},"geometry":{"type":"LineString","coordinates":[${points.joinToString(",") { coord(it) }}]}}""")
         }
-        line("surface", n * w + 0.6, left + n * w / 2)
-        lanes.forEachIndexed { i, lane ->
-            if (LaneIcons.recommended(lane, step.modifier) != null) line("good", w - 0.5, left + (i + 0.5) * w)
-        }
-        for (i in 1 until n) line("sep", 0.18, left + i * w)
-        line("edge", 0.35, left - 0.15)
-        line("edge", 0.35, left + n * w + 0.15)
+        fun along(offset: Double, from: Double = v.start) = v.path(from, v.stop) { offset }
+        line("surface", n * w, along(v.left + n * w / 2))
+        // Trasa vchádza do správnych pruhov plynulo; pri viacerých správnych pruhoch smeruje do ich stredu.
+        val good = (0 until n).filter { v.good[it] }
+        line("good", w - 0.5, v.path(v.start, v.start + v.ramp, v::shiftAt))
+        for (i in good) line("good", w - 0.5, along(v.left + (i + 0.5) * w, v.start + v.ramp * 0.6))
+        for (i in 1 until n) line("sep", 0.16, along(v.left + i * w))
+        // Na obojsmernej ceste je ľavým okrajom stredová čiara z mapy.
+        if (v.left < 0) line("edge", 0.3, along(v.left + 0.15))
+        line("edge", 0.3, along(v.left + n * w - 0.15))
 
         val marks = ArrayList<String>()
-        fun mark(along: Double, offset: Double, icon: String) {
-            if (along < start + 5) return
-            val p = route.pointAt(along)
-            val bearing = Geo.bearing(p, route.pointAt(along + 5))
-            marks.add(point(Geo.offset(p, bearing, offset), """"icon":"$icon","bearing":$bearing"""))
+        val scale = (w / 3.5).coerceIn(0.6, 1.0)
+        fun mark(at: Double, offset: Double, icon: String) {
+            if (at < v.start + 5 || at > v.stop) return
+            marks.add(point(v.pointAt(at, offset), """"icon":"$icon","bearing":${v.bearingAt(at)},"s":$scale"""))
         }
-        lanes.forEachIndexed { i, lane ->
-            val center = left + (i + 0.5) * w
-            mark(end - 55, center, laneIcon(lane, step.modifier))
-            if (!lane.valid) mark(end - 22, center, "lane-x")
-        }
-        // Priechody pre chodcov cez naše pruhy (len tie cez cestu, po ktorej ideme, nie cez priečnu).
-        val endPoint = route.pointAt(end)
-        for (crossing in Crossings.around(endPoint)) {
-            if (Geo.distance(crossing.point, endPoint) > 400) continue
-            val along = route.alongOf(crossing.point, 8.0) ?: continue
-            if (along < start + 5 || along > end + 12) continue
-            val p = route.pointAt(along)
-            val bearing = Geo.bearing(p, route.pointAt(along + 5))
-            val diff = ((crossing.bearing - bearing) % 180 + 180) % 180
-            if (abs(diff - 90) < 55) continue
-            // Pruhy po ~0,55 m s rovnakými medzerami cez všetky naše pruhy.
-            val zebra = route.slice(along - 1.8, along + 1.8).joinToString(",") { coord(it) }
-            val width = n * w * 0.94
-            val bars = (width / 1.1).roundToInt().coerceAtLeast(3)
-            for (i in 0 until bars) {
-                val offset = left + n * w / 2 + (i - (bars - 1) / 2.0) * width / bars
-                lines.add("""{"type":"Feature","properties":{"k":"zebra","w":${width / bars * 0.5},"o":$offset},"geometry":{"type":"LineString","coordinates":[$zebra]}}""")
-            }
+        step.lanes.forEachIndexed { i, lane ->
+            val center = v.left + (i + 0.5) * w
+            mark(v.end - 70, center, laneIcon(lane, step.modifier))
+            if (!lane.valid) mark(v.end - 25, center, "lane-x")
         }
         return """{"type":"FeatureCollection","features":[${lines.joinToString(",")}]}""" to
             """{"type":"FeatureCollection","features":[${marks.joinToString(",")}]}"""
+    }
+
+    /**
+     * Cesta pod bodom trasy [along] podľa vykreslenej mapy: trieda (šírka vozovky ako na mape) a jednosmernosť.
+     * Berie sa len cesta v smere trasy (nie priečna na križovatke). Null, ak bod nie je na obrazovke.
+     */
+    private fun roadAt(route: Route, along: Double): RoadShape? {
+        val bearing = Geo.bearing(route.pointAt(along - 5), route.pointAt(along + 10))
+        for (probe in listOf(along, along + 25)) {
+            val p = route.pointAt(probe)
+            val screen = map.projection.toScreenLocation(LatLng(p.lat, p.lon))
+            if (screen.x < 0 || screen.y < 0 || screen.x > width || screen.y > height) continue
+            val r = 4 * context.resources.displayMetrics.density
+            val features = map.queryRenderedFeatures(
+                RectF(screen.x - r, screen.y - r, screen.x + r, screen.y + r), "motorway", "major", "secondary", "minor", "service",
+            )
+            var best: RoadShape? = null
+            var bestDistance = Double.MAX_VALUE
+            for (feature in features) {
+                val lines = when (val g = feature.geometry()) {
+                    is LineString -> listOf(g.coordinates())
+                    is MultiLineString -> g.coordinates()
+                    else -> continue
+                }
+                for (line in lines) {
+                    for (k in 0 until line.size - 1) {
+                        val a = GeoPoint(line[k].latitude(), line[k].longitude())
+                        val b = GeoPoint(line[k + 1].latitude(), line[k + 1].longitude())
+                        if (Geo.distance(a, b) < 0.5) continue
+                        val turn = abs(((Geo.bearing(a, b) - bearing) % 180 + 180) % 180 - 90)
+                        if (turn < 55) continue // priečna cesta
+                        val distance = Geo.pointToSegment(p, a, b).distance
+                        if (distance >= bestDistance) continue
+                        bestDistance = distance
+                        val width = when (feature.getStringProperty("class")) {
+                            "motorway" -> 11.0
+                            "trunk", "primary" -> 10.0
+                            "secondary", "tertiary" -> 8.0
+                            "service" -> 4.0
+                            else -> 6.5
+                        }
+                        val oneWay = feature.hasNonNullValueForProperty("oneway") && feature.getNumberProperty("oneway").toInt() != 0
+                        best = RoadShape(width, oneWay)
+                    }
+                }
+            }
+            if (best != null && bestDistance < 15) return best
+        }
+        return null
+    }
+
+    /** Časť trasy medzi dvoma vzdialenosťami; pred manévrom s pruhmi posunutá do správnych pruhov. */
+    private fun pathOf(route: Route, from: Double, to: Double): List<GeoPoint> {
+        val v = laneView?.takeIf { it.route === route }
+        if (v == null || to <= v.start || from >= v.end) return route.slice(from, to)
+        val result = ArrayList<GeoPoint>()
+        fun add(points: List<GeoPoint>) {
+            for (p in points) if (result.isEmpty() || Geo.distance(result.last(), p) > 0.01) result.add(p)
+        }
+        if (from < v.start) add(route.slice(from, v.start))
+        add(v.path(from, to, v::shiftAt))
+        if (to > v.end) add(route.slice(v.end, to))
+        return result
+    }
+
+    /** Kompas beží len pešo počas navigácie a kým je mapa vidieť. */
+    private fun updateCompass(walking: Boolean) {
+        val want = useCompass && walking && flowEnabled && !disposed
+        if (want == compassOn) return
+        compassOn = want
+        if (want) Compass.addListener(context, compassListener) else Compass.removeListener(compassListener)
+    }
+
+    /** Zobrazená poloha auta; v pohľade na pruhy v správnom pruhu. */
+    private fun shownMe(): GeoPoint? {
+        val me = motion.point ?: return null
+        val along = motion.along ?: return me
+        val v = laneView?.takeIf { motion.onRoute === it.route && along in it } ?: return me
+        return v.pointAt(along, v.shiftAt(along))
     }
 
     private fun laneIcon(lane: online.virivky.amap.nav.LaneInfo, modifier: String?): String {
@@ -837,7 +931,7 @@ class NavMap(
         lastFrameAt = now
         var moving = motion.step(now)
         drawMe()
-        val me = motion.point
+        val me = shownMe()
         if (follow && me != null && width > 0 && height > 0) {
             val navigating = isNavigating()
             if (camZoom.isNaN()) camZoom = map.cameraPosition.zoom
@@ -882,32 +976,50 @@ class NavMap(
     /** Auto (či bodka) na zobrazenej polohe. */
     private fun drawMe() {
         val s = style ?: return
-        val me = motion.point ?: return
+        val me = shownMe() ?: return
         s.getSourceAs<GeoJsonSource>("me")?.setGeoJson(
             point(me, """"bearing":${motion.bearing ?: 0.0},"icon":"$meIcon","compass":${if (meCompass) 1 else 0}""")
         )
     }
 
-    /** Trasa rozdelená na úseky podľa premávky (vlastnosť „level“ určuje farbu). */
-    private fun routeFeatures(route: Route, fromSegment: Int, head: GeoPoint?, foot: Boolean): String {
-        val levels = route.segmentTraffic
+    /**
+     * Trasa od [from] rozdelená na úseky podľa premávky (vlastnosť „level“ určuje farbu). V pohľade na pruhy
+     * ju po stop čiaru nahrádzajú zelené pruhy; za stop čiarou pokračuje zo správneho pruhu.
+     */
+    private fun routeFeatures(route: Route, from: Double, foot: Boolean): String {
         val features = ArrayList<String>()
+        val v = laneView?.takeIf { it.route === route && from < it.end }
+        if (v == null) {
+            addRoute(route, from, route.distance, foot, features)
+        } else {
+            addRoute(route, from, v.start, foot, features)
+            val exit = pathOf(route, max(from, v.stop), v.end)
+            if (exit.size >= 2) features.add(feature(exit, route.segmentTraffic.getOrElse(route.progressAt(v.end).segmentIndex) { 0 }, foot))
+            addRoute(route, v.end, route.distance, foot, features)
+        }
+        return """{"type":"FeatureCollection","features":[${features.joinToString(",")}]}"""
+    }
+
+    private fun addRoute(route: Route, from: Double, to: Double, foot: Boolean, features: MutableList<String>) {
+        if (to - from < 0.5) return
+        val levels = route.segmentTraffic
         var current = ArrayList<GeoPoint>()
         var level = -1
-        for (i in fromSegment until route.points.size - 1) {
+        for (i in 0 until route.points.size - 1) {
+            val a = route.alongAtIndex(i)
+            val b = route.alongAtIndex(i + 1)
+            if (b <= from) continue
+            if (a >= to) break
             val segmentLevel = levels.getOrElse(i) { 0 }
             if (segmentLevel != level) {
                 if (current.size >= 2) features.add(feature(current, level, foot))
                 current = ArrayList()
-                current.add(if (i == fromSegment && head != null) head else route.points[i])
+                current.add(if (a < from) route.pointAt(from) else route.points[i])
                 level = segmentLevel
-            } else if (current.isEmpty()) {
-                current.add(route.points[i])
             }
-            current.add(route.points[i + 1])
+            current.add(if (b > to) route.pointAt(to) else route.points[i + 1])
         }
         if (current.size >= 2) features.add(feature(current, level, foot))
-        return """{"type":"FeatureCollection","features":[${features.joinToString(",")}]}"""
     }
 
     private fun feature(points: List<GeoPoint>, level: Int, foot: Boolean = false) =
@@ -927,6 +1039,9 @@ class NavMap(
             arrayOf(0f, 3f, 3f, 1f), arrayOf(0f, 3.5f, 3f, 0.5f),
         )
         private const val FLOW_FRAME_MS = 60L
+
+        /** Po koľkých ms bez dotyku sa mapa počas navigácie vráti na polohu. */
+        private const val RECENTER_MS = 10_000L
 
         /** Ako dlho trvá plynulý presun kamery k autu. */
         private const val CATCH_MS = 800.0

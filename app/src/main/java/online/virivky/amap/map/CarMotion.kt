@@ -39,6 +39,16 @@ class CarMotion {
     val onRoute: Route?
         get() = if (along != null) route else null
 
+    /** Pešo: smer podľa kompasu ([turnTo]) aj na trase, nie podľa tvaru trasy. */
+    var followHeading = false
+
+    /** Nový smer (kompas) bez novej polohy; vráti true, ak sa treba otáčať. */
+    fun turnTo(heading: Double?): Boolean {
+        if (heading == null || heading == targetHeading) return false
+        targetHeading = heading
+        return true
+    }
+
     /**
      * Nová poloha. [route] a [routeAlong] = poloha na trase (počas navigácie), inak null.
      * Vráti true, ak sa začal nový pohyb (treba kresliť snímky).
@@ -90,7 +100,8 @@ class CarMotion {
             // Smer z tvaru trasy okolo auta (bez skokov na zlomoch čiary).
             val back = r.pointAt(a - 6)
             val ahead = r.pointAt(a + 8)
-            wanted = if (Geo.distance(back, ahead) > 1) Geo.bearing(back, ahead) else targetHeading
+            wanted = if (followHeading && targetHeading != null) targetHeading
+            else if (Geo.distance(back, ahead) > 1) Geo.bearing(back, ahead) else targetHeading
         } else {
             val f = from
             val g = to

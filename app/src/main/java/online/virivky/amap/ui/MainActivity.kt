@@ -216,7 +216,7 @@ class MainActivity : Activity() {
 
         mapView.onCreate(savedInstanceState)
         mapView.getMapAsync { map ->
-            navMap = NavMap(this, map, isDark, followSun = true).also { controller ->
+            navMap = NavMap(this, map, isDark, followSun = true, useCompass = true).also { controller ->
                 controller.onFollowChanged = { render() }
                 map.addOnMapLongClickListener { latLng ->
                     val point = GeoPoint(latLng.latitude, latLng.longitude)

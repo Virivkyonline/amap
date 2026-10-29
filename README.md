@@ -16,7 +16,8 @@ Vlastná navigácia **lech-map** pre Android, ktorá funguje aj v **Android Auto
 - **Moje miesta** (tlačidlo pod vyhľadávaním): uloženie miesta, kde práve si (napr. v lese), s názvom;
   miesta sú na mape ako hviezdičky, zoradené od najbližšieho, dajú sa premenovať, zdieľať a odstrániť;
   k miestu sa dá **navigovať pešo** (po chodníkoch a lesných cestách, posledný kúsok priamo k miestu;
-  bez internetu vzdušnou čiarou) alebo autom; prepínač Autom/Pešo je aj v náhľade trasy
+  bez internetu vzdušnou čiarou) alebo autom; prepínač Autom/Pešo je aj v náhľade trasy; pešo je poloha
+  postavička so šípkou smeru podľa kompasu telefónu a mapa sa otáča s telefónom
 - **Domov a Práca** (uložíš hviezdičkou v náhľade trasy alebo podržaním výsledku),
   nedávne ciele, adresa bodu po podržaní prsta na mape
 - výpočet trasy autom a navigácia odbočka po odbočke
@@ -29,9 +30,11 @@ Vlastná navigácia **lech-map** pre Android, ktorá funguje aj v **Android Auto
 - pohľad počas jazdy: **3D**, **2D v smere jazdy** alebo **2D sever hore** (tlačidlo 3D/2D/S);
   farby mapy **automaticky podľa slnka** (v aute podľa auta), stále denné alebo nočné
 - jazdné pruhy pred odbočkou (ktorým pruhom ísť) a **pohľad na pruhy na mape**: pred odbočkou sa mapa
-  priblíži, cesta sa rozdelí na pruhy, správne pruhy sú zelené, na pruhoch biele šípky a červené X
+  priblíži, cesta sa rozdelí na pruhy (v šírke cesty z mapy; na obojsmernej ceste v pravej polovici),
+  trasa aj auto plynulo prejdú do správneho zeleného pruhu, na pruhoch biele šípky a červené X
 - **priechody pre chodcov** (zebry z OpenStreetMap) pri priblížení mapy: biele pruhy cez celú cestu, nakreslené
-  nad zelenou trasou (trasa ich neprekrýva) a pri pohľade na pruhy aj cez zvýraznené pruhy
+  nad zelenou trasou aj nad pruhmi (trasa ich neprekrýva)
+- počas navigácie sa mapa po posunutí prstom (aj náhodnom dotyku) po 10 s sama vráti na polohu
 - zelená trasa ostáva **vnútri cesty** (pri priblížení sa cesta rozširuje, trasa má tmavú stredovú
   medzeru a žlté stredové čiary cesty sú nad ňou)
 - **obraz križovatky** pred zjazdom, rozdvojením a kruhovým objazdom: nakreslený pohľad na cestu

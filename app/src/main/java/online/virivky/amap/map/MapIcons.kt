@@ -117,25 +117,66 @@ object MapIcons {
         c.drawPath(star, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE })
     }
 
-    /** Chodec: modrá bodka s kužeľom v smere chôdze (hore). */
+    /** Chodec: postavička v modrom kruhu, výrazná šípka a svetelný kužeľ v smere chôdze (hore). */
     private fun walker(c: Canvas, w: Float, h: Float) {
         val cx = w / 2
         val cy = h / 2
         val cone = Path()
         cone.moveTo(cx, cy)
-        cone.lineTo(cx - w * 0.3f, cy - h * 0.46f)
-        cone.quadTo(cx, cy - h * 0.56f, cx + w * 0.3f, cy - h * 0.46f)
+        cone.lineTo(cx - w * 0.3f, cy - h * 0.44f)
+        cone.quadTo(cx, cy - h * 0.56f, cx + w * 0.3f, cy - h * 0.44f)
         cone.close()
         c.drawPath(cone, Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            shader = RadialGradient(cx, cy, h * 0.5f, Color.argb(0xAA, 0x3F, 0x80, 0xFF), Color.argb(0x00, 0x3F, 0x80, 0xFF), Shader.TileMode.CLAMP)
+            shader = RadialGradient(cx, cy, h * 0.5f, Color.argb(0x88, 0x3F, 0x80, 0xFF), Color.argb(0x00, 0x3F, 0x80, 0xFF), Shader.TileMode.CLAMP)
         })
         val p = Paint(Paint.ANTI_ALIAS_FLAG)
-        p.color = Color.argb(0x55, 0, 0, 0)
-        c.drawCircle(cx, cy + 1f, w * 0.17f, p)
+        // Šípka smeru nad kruhom s bielym okrajom.
+        val arrow = Path()
+        arrow.moveTo(cx, cy - h * 0.38f)
+        arrow.lineTo(cx + w * 0.13f, cy - h * 0.17f)
+        arrow.lineTo(cx - w * 0.13f, cy - h * 0.17f)
+        arrow.close()
+        p.style = Paint.Style.STROKE
+        p.strokeJoin = Paint.Join.ROUND
+        p.strokeWidth = w * 0.05f
         p.color = Color.WHITE
-        c.drawCircle(cx, cy, w * 0.16f, p)
-        p.color = BLUE
-        c.drawCircle(cx, cy, w * 0.11f, p)
+        c.drawPath(arrow, p)
+        p.style = Paint.Style.FILL
+        p.color = ARROW_BLUE
+        c.drawPath(arrow, p)
+        // Kruh s tieňom a bielym okrajom.
+        p.color = Color.argb(0x55, 0, 0, 0)
+        c.drawCircle(cx, cy + 1f, w * 0.215f, p)
+        p.color = Color.WHITE
+        c.drawCircle(cx, cy, w * 0.205f, p)
+        p.color = ARROW_BLUE
+        c.drawCircle(cx, cy, w * 0.165f, p)
+        // Biela kráčajúca postavička.
+        val s = w * 0.165f
+        p.color = Color.WHITE
+        c.drawCircle(cx + s * 0.08f, cy - s * 0.58f, s * 0.17f, p)
+        val body = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+            style = Paint.Style.STROKE
+            strokeWidth = s * 0.2f
+            strokeCap = Paint.Cap.ROUND
+            strokeJoin = Paint.Join.ROUND
+        }
+        val hip = cx - s * 0.06f to cy + s * 0.18f
+        c.drawLine(cx + s * 0.04f, cy - s * 0.34f, hip.first, hip.second, body)
+        val legs = Path()
+        legs.moveTo(cx - s * 0.36f, cy + s * 0.68f)
+        legs.lineTo(cx - s * 0.18f, cy + s * 0.42f)
+        legs.lineTo(hip.first, hip.second)
+        legs.lineTo(cx + s * 0.14f, cy + s * 0.42f)
+        legs.lineTo(cx + s * 0.34f, cy + s * 0.66f)
+        c.drawPath(legs, body)
+        val arms = Path()
+        arms.moveTo(cx - s * 0.36f, cy + s * 0.06f)
+        arms.lineTo(cx - s * 0.12f, cy - s * 0.26f)
+        arms.lineTo(cx + s * 0.06f, cy - s * 0.22f)
+        arms.lineTo(cx + s * 0.32f, cy - s * 0.02f)
+        c.drawPath(arms, body)
     }
 
     /** Modrá bodka pre polohu bez známeho smeru. */
