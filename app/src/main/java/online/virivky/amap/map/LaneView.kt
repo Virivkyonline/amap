@@ -11,7 +11,7 @@ import kotlin.math.max
 import kotlin.math.min
 
 /** Cesta pod autom podľa mapy: šírka vozovky v metroch (ako ju mapa kreslí) a či je jednosmerná. */
-class RoadShape(val width: Double, val oneWay: Boolean)
+data class RoadShape(val width: Double, val oneWay: Boolean)
 
 /**
  * Pohľad na pruhy pred manévrom (ako v AMap): úsek trasy pred križovatkou, kde sa vozovka kreslí po pruhoch
@@ -72,12 +72,15 @@ class LaneView private constructor(
 
     operator fun contains(along: Double) = along > start && along < end
 
-    /** Posun trasy do strany v mieste [along]: nábeh do pruhov, pruhy a za stop čiarou späť k osi. */
+    /** Posun trasy mimo pruhov (trasa v pravej polovici cesty, [RoadSide]); pruhy naň plynulo nadväzujú. */
+    var base: (Double) -> Double = { 0.0 }
+
+    /** Posun trasy do strany v mieste [along]: nábeh do pruhov, pruhy a za stop čiarou späť na posun mimo pruhov. */
     fun shiftAt(along: Double): Double = when {
-        along <= start || along >= end -> 0.0
-        along < start + ramp -> shift * ease((along - start) / ramp)
+        along <= start || along >= end -> base(along)
+        along < start + ramp -> base(start).let { it + (shift - it) * ease((along - start) / ramp) }
         along <= stop -> shift
-        else -> shift * ease((end - along) / (end - stop))
+        else -> base(end).let { it + (shift - it) * ease((end - along) / (end - stop)) }
     }
 
     /** Bod [right] metrov napravo od vyhladenej osi v mieste [along]. */

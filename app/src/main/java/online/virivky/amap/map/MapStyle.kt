@@ -143,6 +143,12 @@ object MapStyle {
             val o = JSONObject(layer)
             val id = o.getString("id")
             if (id == "building-3d") continue
+            if (id == "route-tint" || id == "lanes-surface") {
+                // Na fotke len jemne, nech cesta presvitá.
+                o.getJSONObject("paint").put("line-opacity", if (id == "route-tint") JSONArray(linear(14.5 to 0, 15.5 to 0.5)) else 0.6)
+                result.add(o.toString())
+                continue
+            }
             if (o.optString("source-layer") == "transportation" && o.optString("type") == "line" && id != "path" && id != "rail") {
                 if (id.contains("center-line") || id.contains("lane-divider")) {
                     (o.optJSONObject("layout") ?: JSONObject().also { o.put("layout", it) }).put("visibility", "none")
@@ -181,6 +187,29 @@ object MapStyle {
            "filter":["all",["match",["get","class"],[$classes],true,false],$NOT_TUNNEL],
            "layout":{"line-cap":"round","line-join":"round"},
            "paint":{"line-color":$color,"line-width":$w}}"""
+
+    /** Podfarbenie nášho smeru jazdy pri jazde (tyrkysová ako v AMap). */
+    private const val TINT = "#22585c"
+
+    /** Žiarivá farba okraja trasy pri pulzovaní. */
+    private const val GLOW = "#8affdf"
+
+    /**
+     * Farba okraja trasy podľa premávky; [glow] 0 až 1 = ako veľmi žiari (pulzovanie pri plynulej premávke,
+     * okraje pri zápchach ostávajú).
+     */
+    fun routeCasingColor(dark: Boolean, glow: Double): String {
+        val c = if (dark) NIGHT else DAY
+        return trafficColor(mix(c.routeCasing, GLOW, glow.coerceIn(0.0, 1.0)), "#b89100", "#b3261e", "#6b0d14")
+    }
+
+    /** Farba medzi [a] a [b] (#rrggbb). */
+    private fun mix(a: String, b: String, t: Double): String {
+        fun channel(hex: String, i: Int) = hex.substring(1 + 2 * i, 3 + 2 * i).toInt(16)
+        return "#" + (0..2).joinToString("") { i ->
+            "%02x".format(Math.round(channel(a, i) + (channel(b, i) - channel(a, i)) * t).toInt())
+        }
+    }
 
     /** Farba trasy podľa premávky na úseku (vlastnosť „level“ z TomTom). */
     private fun trafficColor(free: String, slow: String, jam: String, stopped: String) =
@@ -324,7 +353,13 @@ object MapStyle {
 
             // Cesta, po ktorej vedie trasa, zvýraznená tyrkysovou (ako v AMap) – najviac na šírku cesty.
             add(
-                """{"id":"route-corridor","type":"line","source":"route","minzoom":12,"maxzoom":16.5,
+                """{"id":"route-tint","type":"line","source":"route-tint","minzoom":14.5,
+                "layout":{"line-cap":"round","line-join":"round"},
+                "paint":{"line-color":"$TINT","line-opacity":${linear(14.5 to 0, 15.5 to 1)},
+                  "line-width":["interpolate",["exponential",2],["zoom"],14.5,["*",["get","w"],0.45],22,["*",["get","w"],80.9]]}}"""
+            )
+            add(
+                """{"id":"route-corridor","type":"line","source":"route","minzoom":12,"maxzoom":15.5,
                 "filter":["!=",["get","foot"],1],
                 "layout":{"line-cap":"round","line-join":"round"},
                 "paint":{"line-color":"#2b5654","line-opacity":0.8,
@@ -336,8 +371,8 @@ object MapStyle {
                 """{"id":"route-casing","type":"line","source":"route",
                 "filter":["!=",["get","foot"],1],
                 "layout":{"line-cap":"round","line-join":"round"},
-                "paint":{"line-color":${trafficColor(c.routeCasing, "#b89100", "#b3261e", "#6b0d14")},
-                  "line-width":${linear(5 to 4, 12 to 6.5, 15 to 7, 16 to 7.5, 17 to 11, 18 to 19.5, 19 to 38, 20 to 76)}}}"""
+                "paint":{"line-color":${routeCasingColor(dark, 0.0)},
+                  "line-width":${linear(5 to 4, 12 to 6.5, 15 to 7, 16 to 8.5, 17 to 12.5, 18 to 22, 19 to 44, 20 to 88)}}}"""
             )
             add(
                 """{"id":"route-line","type":"line","source":"route",
@@ -351,7 +386,7 @@ object MapStyle {
                 """{"id":"route-flow","type":"line","source":"route",
                 "filter":["!=",["get","foot"],1],
                 "layout":{"line-cap":"butt","line-join":"round"},
-                "paint":{"line-color":"#ffffff","line-opacity":0.38,"line-dasharray":[0,4,3],
+                "paint":{"line-color":"#ffffff","line-opacity":0.6,"line-dasharray":[0,4,3],
                   "line-width":${linear(5 to 1.2, 12 to 2.2, 15 to 2.5, 16 to 3, 17 to 4.5, 18 to 8.2, 19 to 16.5, 20 to 33)}}}"""
             )
             // Pri veľkom priblížení tmavá medzera medzi pruhmi trasy a čiary cesty nad trasou (ako v AMap).
@@ -367,7 +402,7 @@ object MapStyle {
             add(
                 """{"id":"lanes-surface","type":"line","source":"lanes","minzoom":15,"filter":["==",["get","k"],"surface"],
                 "layout":{"line-cap":"butt","line-join":"round"},
-                "paint":{"line-color":"${c.asphaltNear ?: "#9AA1AE"}","line-width":${meters("w")}}}"""
+                "paint":{"line-color":"$TINT","line-width":${meters("w")}}}"""
             )
             add(
                 """{"id":"lanes-good","type":"line","source":"lanes","minzoom":15,"filter":["==",["get","k"],"good"],
@@ -384,6 +419,13 @@ object MapStyle {
                 """{"id":"lanes-edge","type":"line","source":"lanes","minzoom":15,"filter":["==",["get","k"],"edge"],
                 "layout":{"line-cap":"butt","line-join":"round"},
                 "paint":{"line-color":"${c.edgeNear ?: "#6E7586"}","line-width":${meters("w")}}}"""
+            )
+            // Svetelná vlna, ktorá beží po trase od auta dopredu (farebný prechod posúva NavMap).
+            add(
+                """{"id":"route-pulse","type":"line","source":"route-pulse",
+                "layout":{"line-cap":"round","line-join":"round"},
+                "paint":{"line-width":${linear(12 to 5, 15 to 6, 16 to 7, 17 to 10, 18 to 18, 19 to 36, 20 to 72)},
+                  "line-gradient":["interpolate",["linear"],["line-progress"],0,"rgba(255,255,255,0)",1,"rgba(255,255,255,0)"]}}"""
             )
             add(
                 """{"id":"route-center-line","type":"line","source":"omt","source-layer":"transportation","minzoom":16,
@@ -569,7 +611,9 @@ object MapStyle {
             "destination", "saved", "me",
         )
             .joinToString(",") { """"$it":{"type":"geojson","data":$EMPTY}""" } +
-            ""","route-head":{"type":"geojson","lineMetrics":true,"data":$EMPTY}""" + traffic +
+            ""","route-head":{"type":"geojson","lineMetrics":true,"data":$EMPTY}""" +
+            ""","route-pulse":{"type":"geojson","lineMetrics":true,"data":$EMPTY}""" +
+            ""","route-tint":{"type":"geojson","data":$EMPTY}""" + traffic +
             if (aerial) ""","aerial":{"type":"raster","tileSize":256,"minzoom":8,"maxzoom":20,"attribution":"$AERIAL_CREDIT",
               "tiles":["$AERIAL_TILES"]}""" else ""
         val all = layers.flatMap { listOf(it) + listOfNotNull(nearCopy(it)) }

@@ -4,6 +4,9 @@ Vlastná navigácia **lech-map** pre Android, ktorá funguje aj v **Android Auto
 
 - vektorová mapa v štýle AMap v telefóne aj na obrazovke auta: tmavomodrá v noci,
   pri jazde tmavý asfalt so svetlými okrajmi, zelená trasa so šípkami, auto s kompasom, 3D budovy
+- trasa aj auto idú **v pravom pruhu** (na obojsmernej ceste v pravej polovici, na diaľnici v pravom
+  pruhu nášho smeru) a celý náš smer jazdy je podfarbený tyrkysovou; typ a šírku cesty berie z mapy
+- trasa **pulzuje**: okraj trasy žiari a pohasína a od auta po trase beží svetelná vlna
 - čierny panel s odbočkou a pruhmi, rýchlosť v kruhu, limit pri názve ulice,
   spodná lišta s časom, km, počtom semaforov a časom príchodu
 - **letecká mapa** (tlačidlo s vrstvami pri tlačidlách mapy alebo v nastaveniach): skutočné fotky zhora
