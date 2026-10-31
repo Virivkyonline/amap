@@ -574,4 +574,18 @@
                 android:tint="@android:color/white" />
         </LinearLayout>
     </LinearLayout>
+
+    <!-- Číslo verzie vľavo hore pod stavovým riadkom (odsadenie podľa neho nastaví MainActivity). -->
+    <TextView
+        android:id="@+id/app_version"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|start"
+        android:layout_marginStart="14dp"
+        android:background="@drawable/version_bg"
+        android:elevation="8dp"
+        android:paddingStart="5dp"
+        android:paddingEnd="5dp"
+        android:textColor="#E6FFFFFF"
+        android:textSize="9sp" />
 </FrameLayout>

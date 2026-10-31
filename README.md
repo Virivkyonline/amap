@@ -7,6 +7,8 @@ Vlastná navigácia **lech-map** pre Android, ktorá funguje aj v **Android Auto
 - trasa aj auto idú **v pravom pruhu** (na obojsmernej ceste v pravej polovici, na diaľnici v pravom
   pruhu nášho smeru) a celý náš smer jazdy je podfarbený tyrkysovou; typ a šírku cesty berie z mapy
 - trasa **pulzuje**: okraj trasy žiari a pohasína a od auta po trase beží svetelná vlna
+- tenký pruh vpravo ukazuje, akú časť cesty do cieľa máš za sebou (od spustenia navigácie, aj cez prepočty trasy)
+- číslo verzie je vľavo hore pod stavovým riadkom (v aute na konci riadku so zdrojmi mapy dole)
 - čierny panel s odbočkou a pruhmi, rýchlosť v kruhu, limit pri názve ulice,
   spodná lišta s časom, km, počtom semaforov a časom príchodu
 - **letecká mapa** (tlačidlo s vrstvami pri tlačidlách mapy alebo v nastaveniach): skutočné fotky zhora

@@ -211,6 +211,16 @@ class MainActivity : Activity() {
         searchFilters = findViewById(R.id.search_filters)
         routeChoices = findViewById(R.id.route_choices)
         hud.showAttribution = true
+        // Číslo verzie vľavo hore, tesne pod stavovým riadkom (rovnako vysoko ako odsadenie panelov).
+        val version = findViewById<TextView>(R.id.app_version)
+        version.text = "v" + online.virivky.amap.util.AppVersion.name(this)
+        overlay.addOnLayoutChangeListener { v, _, _, _, _, _, _, _, _ ->
+            val params = version.layoutParams as android.widget.FrameLayout.LayoutParams
+            if (params.topMargin != v.paddingTop) {
+                params.topMargin = v.paddingTop
+                version.layoutParams = params
+            }
+        }
         buildCategories()
         buildFilters()
 

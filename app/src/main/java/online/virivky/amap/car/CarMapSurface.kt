@@ -107,7 +107,10 @@ class CarMapSurface(private val carContext: CarContext) : SurfaceCallback {
             .compassEnabled(false)
         val map = MapView(context, options)
         map.onCreate(null)
-        val overlay = DriveHud(context).apply { showAttribution = true }
+        val overlay = DriveHud(context).apply {
+            showAttribution = true
+            showVersion = true
+        }
         overlay.viewport.set(visibleArea)
         val root = FrameLayout(context)
         root.addView(map, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))

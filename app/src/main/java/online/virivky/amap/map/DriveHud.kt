@@ -30,6 +30,10 @@ class DriveHud @JvmOverloads constructor(context: Context, attrs: AttributeSet? 
     /** Text o zdroji mapy (v aute nie je tlačidlo s informáciami). */
     var showAttribution = false
 
+    /** Za textom o zdroji aj číslo verzie (v aute, kde nie je vidieť inde). */
+    var showVersion = false
+    private val version by lazy { online.virivky.amap.util.AppVersion.name(context) }
+
     private val dp = resources.displayMetrics.density
     private val fill = Paint(Paint.ANTI_ALIAS_FLAG)
     private val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
@@ -173,7 +177,7 @@ class DriveHud @JvmOverloads constructor(context: Context, attrs: AttributeSet? 
         text.textAlign = Paint.Align.CENTER
     }
 
-    /** Zvislý pruh priebehu trasy vpravo (dole štart, hore cieľ), zafarbený podľa premávky. */
+    /** Zvislý pruh priebehu cesty vpravo (dole štart navigácie, hore cieľ), zafarbený podľa premávky. */
     private fun drawProgress(canvas: Canvas, area: Rect, fraction: Float, route: Route?) {
         val x = area.right - 14 * dp
         val top = area.top + 24 * dp
@@ -186,8 +190,8 @@ class DriveHud @JvmOverloads constructor(context: Context, attrs: AttributeSet? 
         canvas.drawRoundRect(rect, w / 2, w / 2, fill)
         if (route != null && route.distance > 0) {
             for (span in route.traffic) {
-                val from = (route.alongAtIndex(span.startIndex) / route.distance).toFloat()
-                val to = (route.alongAtIndex(span.endIndex) / route.distance).toFloat()
+                val from = NavigationController.tripFraction(route.alongAtIndex(span.startIndex))
+                val to = NavigationController.tripFraction(route.alongAtIndex(span.endIndex))
                 fill.color = when (span.level) {
                     1 -> Color.rgb(0xF5, 0xC5, 0x18)
                     2 -> Color.rgb(0xF2, 0x45, 0x3D)
@@ -247,7 +251,8 @@ class DriveHud @JvmOverloads constructor(context: Context, attrs: AttributeSet? 
         text.color = Color.argb(0xAA, 0xFF, 0xFF, 0xFF)
         text.textAlign = Paint.Align.LEFT
         val label = "© OpenStreetMap · OpenFreeMap" + (if (Settings.tomtomKey != null) " · © TomTom" else "") +
-            if (Settings.aerialMap) " · ${MapStyle.AERIAL_CREDIT}" else ""
+            (if (Settings.aerialMap) " · ${MapStyle.AERIAL_CREDIT}" else "") +
+            if (showVersion && version.isNotEmpty()) " · lech-map v$version" else ""
         canvas.drawText(label, area.left + 8 * dp, area.bottom - 6 * dp, text)
         text.textAlign = Paint.Align.CENTER
     }

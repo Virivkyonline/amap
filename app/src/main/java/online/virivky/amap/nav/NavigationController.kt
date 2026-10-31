@@ -179,13 +179,22 @@ object NavigationController {
             return r.trafficSignals.count { it > traveled + 5 }
         }
 
-    /** Prejdená časť trasy 0..1. */
+    /**
+     * Metre prejdené počas tejto navigácie po predošlých trasách – po každom prepočte (aj pravidelnom
+     * kvôli premávke) začína nová trasa od miesta, kde auto je, ale priebeh cesty do cieľa ide ďalej.
+     */
+    private var tripDone = 0.0
+
+    /** Prejdená časť cesty do cieľa 0..1 (od spustenia navigácie, aj cez prepočty trasy). */
     val progressFraction: Float
-        get() {
-            val r = route ?: return 0f
-            val p = progress ?: return 0f
-            return if (r.distance > 0) (p.traveled / r.distance).toFloat().coerceIn(0f, 1f) else 0f
-        }
+        get() = tripFraction(progress?.traveled ?: 0.0)
+
+    /** Miesto [along] na aktuálnej trase ako podiel celej cesty od spustenia navigácie (0..1). */
+    fun tripFraction(along: Double): Float {
+        val r = route ?: return 0f
+        val total = tripDone + r.distance
+        return if (total > 0) ((tripDone + along) / total).toFloat().coerceIn(0f, 1f) else 0f
+    }
 
     val overSpeed: Boolean
         get() {
@@ -352,6 +361,7 @@ object NavigationController {
         routes = emptyList()
         nearDestination = false
         phase = Phase.NAVIGATING
+        tripDone = 0.0
         announced.clear()
         offRouteCount = 0
         offRoute = false
@@ -454,6 +464,8 @@ object NavigationController {
         }
         val id = ++request
         if (!silent) rerouting = reroute
+        // Koľko z doterajšej trasy je už za nami (nová trasa začne odtiaľto).
+        val doneBefore = if (phase == Phase.NAVIGATING && everOnRoute) progress?.traveled ?: 0.0 else 0.0
         routeFrom = GeoPoint(here)
         lastTrafficRefreshAt = SystemClock.elapsedRealtime()
         val remainingBefore = progress?.remainingSeconds
@@ -478,6 +490,7 @@ object NavigationController {
                 clearRoadInfo()
                 if (!foot) loadRoadData(newRoute)
                 if (phase == Phase.NAVIGATING) {
+                    tripDone += doneBefore
                     progress = null
                     everOnRoute = false
                     LocationTracker.last?.let { updateProgress(it) }
@@ -552,6 +565,7 @@ object NavigationController {
         // Pešo vzdušnou čiarou: čiara vždy z miesta, kde som (bez siete, bez prepočtu).
         val target = destination
         if (r.direct && target != null && r.distanceTo(here) > 15) {
+            tripDone += progress?.traveled ?: 0.0
             r = Router.direct(here, target.point)
             route = r
         }
