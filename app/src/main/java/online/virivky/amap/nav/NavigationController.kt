@@ -2,6 +2,7 @@ package online.virivky.amap.nav
 
 import android.content.Context
 import android.location.Location
+import android.location.LocationManager
 import android.os.SystemClock
 import online.virivky.amap.data.Place
 import online.virivky.amap.data.PoiCategory
@@ -35,6 +36,10 @@ object NavigationController {
 
     /** Najkratší čas medzi dvoma prepočtami trasy po zídení z nej. */
     private const val REROUTE_MS = 6_000L
+    /** Autom horšia poloha ako toľko metrov neplatí (v tuneli a medzi budovami býva chybná). */
+    private const val MAX_CAR_ACCURACY = 50f
+    /** Poloha zo siete len keď GPS nie je dlhšie (štart v garáži, dlhý výpadok mimo tunela). */
+    private const val NETWORK_AFTER_MS = 5 * 60_000L
 
     fun interface Listener {
         fun onNavigationChanged()
@@ -154,6 +159,9 @@ object NavigationController {
         private set
 
     private var lastFixAt = 0L
+    /** Posledná poloha z GPS (akejkoľvek presnosti) a koľko po sebe nesedelo k odhadu po výpadku signálu. */
+    private var lastGpsFixAt = 0L
+    private var doubtfulFixes = 0
     private var lastSpeed = 0.0
     private val ticker = object : Runnable {
         override fun run() {
@@ -546,6 +554,13 @@ object NavigationController {
     private fun onLocation(location: Location) {
         if (phase == Phase.PREVIEW) refreshPreviewStart(location)
         if (phase != Phase.NAVIGATING) return
+        if (location.provider == LocationManager.GPS_PROVIDER) {
+            lastGpsFixAt = SystemClock.elapsedRealtime()
+            // Rýchlosť z GPS (Dopplerov jav) býva správna aj pri nepresnej polohe – odhad bez polohy
+            // tak napr. na semafore zastane.
+            speedOf(location)?.let { lastSpeed = it }
+        }
+        if (!onFoot && !trustworthy(location)) return
         lastFixAt = SystemClock.elapsedRealtime()
         speedOf(location)?.let { lastSpeed = it }
         estimating = false
@@ -625,6 +640,36 @@ object NavigationController {
         updateRoadInfo(r, p, speed)
     }
 
+    /**
+     * Autom sa berú len dobré polohy z GPS. V tuneli posiela telefón polohu zo siete (vysielače, chyba
+     * stovky metrov) alebo nepresné GPS – auto by skákalo na iné cesty a trasa by sa nezmyselne prepočítala.
+     * Vtedy sa auto ďalej posúva po trase odhadom ([estimateWithoutGps]). Po výpadku signálu (a v známom
+     * tuneli) musí poloha sedieť k odhadu; inak sa ignoruje, kým ju nepotvrdí niekoľko ďalších.
+     */
+    private fun trustworthy(location: Location): Boolean {
+        val now = SystemClock.elapsedRealtime()
+        val r = route ?: return true
+        val p = progress ?: return true
+        val inTunnel = r.tunnels.any { p.traveled in it.startAlong - 50..it.endAlong + 50 }
+        if (location.provider != LocationManager.GPS_PROVIDER) {
+            // Zo siete len vtedy, keď GPS dlho nie je (napr. štart v garáži) a nie sme v tuneli.
+            return !inTunnel && !estimating && now - lastGpsFixAt > NETWORK_AFTER_MS
+        }
+        if (location.hasAccuracy() && location.accuracy > MAX_CAR_ACCURACY) return false
+        if (!estimating && !inTunnel) {
+            doubtfulFixes = 0
+            return true
+        }
+        val candidate = r.locate(GeoPoint(location), p.segmentIndex)
+        val fits = candidate.offRouteDistance < 40 && kotlin.math.abs(candidate.traveled - p.traveled) < 250
+        if (fits || doubtfulFixes >= 4) {
+            doubtfulFixes = 0
+            return true
+        }
+        doubtfulFixes++
+        return false
+    }
+
     private fun speedOf(location: Location): Double? =
         if (location.hasSpeed()) location.speed.toDouble() else null
 
@@ -637,7 +682,9 @@ object NavigationController {
         val r = route ?: return
         val p = progress ?: return
         val age = SystemClock.elapsedRealtime() - lastFixAt
-        if (age < 2500 || age > 180_000 || lastSpeed < 5) return
+        // V známom tuneli (aj dlhom, napr. Višňové) sa odhaduje dlhšie.
+        val inTunnel = r.tunnels.any { p.traveled in it.startAlong - 50..it.endAlong + 50 }
+        if (age < 2500 || age > (if (inTunnel) 600_000 else 180_000) || lastSpeed < 5) return
         val next = r.progressAt(p.traveled + lastSpeed)
         if (next.remainingDistance < 25) return
         progress = next
