@@ -82,43 +82,25 @@ class RoadSide(val route: Route) {
         return values[i] + (values[i + 1] - values[i]) * (x - i)
     }
 
+    /** Os trasy so zaoblenými rohmi (trasa, auto aj pruhy idú po nej). */
+    val axis = RouteAxis(route)
+
+    /** Bod zaoblenej osi trasy v mieste [along]. */
+    fun axisAt(along: Double): GeoPoint = axis.at(along)
+
     /** Bod trasy v mieste [along] posunutý o [right] metrov doprava. */
     fun pointAt(along: Double, right: Double): GeoPoint {
-        val p = route.pointAt(along)
+        val p = axisAt(along)
         if (abs(right) < 0.01) return p
-        val a = route.pointAt(along - 4)
-        val b = route.pointAt(along + 4)
+        val a = axisAt(along - 3)
+        val b = axisAt(along + 3)
         return if (Geo.distance(a, b) > 0.5) Geo.offset(p, Geo.bearing(a, b), right) else p
     }
 
     /** Trasa medzi [from] a [to] posunutá podľa [offset] (metre doprava v mieste along). */
     fun path(from: Double, to: Double, offset: (Double) -> Double = ::offsetAt): List<GeoPoint> {
-        val start = from.coerceIn(0.0, route.distance)
-        val end = to.coerceIn(start, route.distance)
-        val points = ArrayList<GeoPoint>()
-        val alongs = ArrayList<Double>()
-        fun add(p: GeoPoint, a: Double) {
-            if (points.isNotEmpty() && Geo.distance(points.last(), p) < 0.3) return
-            points.add(p)
-            alongs.add(a)
-        }
-        add(route.pointAt(start), start)
-        var lo = 0
-        var hi = route.points.size - 1
-        while (hi - lo > 1) {
-            val mid = (lo + hi) / 2
-            if (route.alongAtIndex(mid) <= start) lo = mid else hi = mid
-        }
-        for (i in lo until route.points.size) {
-            val a = route.alongAtIndex(i)
-            if (a >= end) break
-            if (a > start) add(route.points[i], a)
-        }
-        if (points.size < 2 || Geo.distance(points.last(), route.pointAt(end)) >= 0.3) {
-            points.add(route.pointAt(end))
-            alongs.add(end)
-        }
-        return shift(points, DoubleArray(alongs.size) { alongs[it] }, offset)
+        val (points, alongs) = axis.slice(from, to)
+        return shift(points, alongs, offset)
     }
 
     /** Odhad, kým cestu nepoznáme z mapy: diaľnica, rýchlostná cesta či rampa, inak obojsmerná miestna cesta. */

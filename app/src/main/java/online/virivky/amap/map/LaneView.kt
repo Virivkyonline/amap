@@ -30,6 +30,8 @@ class LaneView private constructor(
     val laneWidth: Double,
     /** Ktoré pruhy sú správne (zelené). */
     val good: BooleanArray,
+    /** Os trasy (zaoblená v rohoch, [RoadSide.axisAt]), z ktorej sa pruhy počítajú. */
+    axis: (Double) -> GeoPoint,
 ) {
     val lanes = good.size
 
@@ -46,7 +48,7 @@ class LaneView private constructor(
     init {
         // Dvakrát kĺzavý priemer okolo každého bodu (plynulé oblúky namiesto zlomov); ku koncom sa okno
         // zužuje, aby os nadväzovala na trasu.
-        var smooth = Array(count + 1) { route.pointAt(along(it)) }
+        var smooth = Array(count + 1) { axis(along(it)) }
         repeat(2) {
             val raw = smooth
             smooth = Array(count + 1) { i ->
@@ -130,7 +132,10 @@ class LaneView private constructor(
          * Pohľad na pruhy pre manéver [stepIndex] s pruhmi; začína pred autom ([carAlong]), aby auto neskočilo
          * do strany. [road] = cesta pod autom podľa mapy, null = odhad podľa typu manévru.
          */
-        fun create(route: Route, stepIndex: Int, step: RouteStep, carAlong: Double?, road: RoadShape?): LaneView? {
+        fun create(
+            route: Route, stepIndex: Int, step: RouteStep, carAlong: Double?, road: RoadShape?,
+            axis: (Double) -> GeoPoint = route::pointAt,
+        ): LaneView? {
             val n = step.lanes.size
             if (n == 0) return null
             val end = route.stepAlong(stepIndex)
@@ -153,7 +158,7 @@ class LaneView private constructor(
             val good = BooleanArray(n) { LaneIcons.recommended(step.lanes[it], step.modifier) != null }
             if (good.none { it }) step.lanes.indices.forEach { good[it] = step.lanes[it].valid }
             if (good.none { it }) good.fill(true)
-            return LaneView(route, stepIndex, start, stop, end, left, w, good)
+            return LaneView(route, stepIndex, start, stop, end, left, w, good, axis)
         }
 
         private fun ease(t: Double) = t * t * (3 - 2 * t)

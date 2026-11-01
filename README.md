@@ -42,7 +42,9 @@ Vlastná navigácia **lech-map** pre Android, ktorá funguje aj v **Android Auto
   priblíži, cesta sa rozdelí na pruhy (v šírke cesty z mapy; na obojsmernej ceste v pravej polovici),
   trasa aj auto plynulo prejdú do správneho zeleného pruhu, na pruhoch biele šípky a červené X
 - **priechody pre chodcov** (zebry z OpenStreetMap) pri priblížení mapy: biele pruhy cez celú cestu, nakreslené
-  nad zelenou trasou aj nad pruhmi (trasa ich neprekrýva)
+  nad zelenou trasou aj nad pruhmi (trasa ich neprekrýva); aj priechody zakreslené len ako chodník cez cestu,
+  počas navigácie sa načítavajú 3 km dopredu po trase
+- trasa, šípka odbočky aj auto idú v zákrutách **plynulým oblúkom** (nie ostrým zlomom)
 - počas navigácie sa mapa po posunutí prstom (aj náhodnom dotyku) po 10 s sama vráti na polohu
 - auto na mape nezaostáva za skutočnou polohou: ide tam, kde podľa rýchlosti práve je (GPS meria raz
   za sekundu a s oneskorením), a zelená trasa začína plynulo pri aute (kúsok pri aute sa kreslí na každej snímke)

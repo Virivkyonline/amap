@@ -92,9 +92,11 @@ class NavMap(
     private var routeSideVersion = -1
     /** Trasa v pravej polovici cesty (počas navigácie autom) a kedy sa naposledy zisťovali cesty pod ňou. */
     private var roadSide: RoadSide? = null
+    private var routeAxis: RouteAxis? = null
     private var classifiedAt = 0L
     private var nearAlong = Double.NaN
     private var shownArrowKey = ""
+    private var shownShaft: List<GeoPoint>? = null
     private var shownCameras: Any? = null
     private var shownSignals: Any? = null
     private var shownDestination: GeoPoint? = null
@@ -108,8 +110,10 @@ class NavMap(
     private var laneView: LaneView? = null
     private var laneViewKey = ""
     private var shownLaneView: LaneView? = null
-    private var lanesSideVersion: Int? = null
+    private var lanesSideVersion: String? = null
     private var shownCrossings = ""
+    /** Kde na trase sa naposledy načítavali priechody dopredu. */
+    private var crossingsAhead = Double.NaN
     private var shownSaved: Any? = null
     private var shownSelected: Route? = null
     private var trafficKey = Settings.trafficLayerKey
@@ -456,8 +460,11 @@ class NavMap(
             laneViewKey = viewKey
             laneView = if (laneStep != null && route != null) {
                 val carAlong = shownAlong ?: progress!!.traveled
-                LaneView.create(route, progress!!.nextStepIndex, laneStep, carAlong, roadAt(route, carAlong))
-                    ?.also { v -> roadSide?.let { side -> v.base = side::offsetAt } }
+                val side = roadSide
+                LaneView.create(
+                    route, progress!!.nextStepIndex, laneStep, carAlong, roadAt(route, carAlong),
+                    side?.let { it::axisAt } ?: route::pointAt,
+                )?.also { v -> side?.let { v.base = it::offsetAt } }
             } else {
                 null
             }
@@ -469,11 +476,12 @@ class NavMap(
         // Šípka najbližšieho manévru.
         val showArrow = step != null && progress!!.distanceToNextStep < 1000 &&
             step.type !in setOf("arrive", "depart", "waypoint") && !(step.modifier == "straight" && step.type != "roundabout")
-        val arrowKey = if (showArrow) "${route.hashCode()}-${progress!!.nextStepIndex}-${System.identityHashCode(lanes)}-${roadSide?.version}" else ""
-        if (arrowKey != shownArrowKey) {
-            if (showArrow) {
-                val along = route!!.stepAlong(progress!!.nextStepIndex)
-                val shaft = pathOf(route, along - 50, along + 35)
+        val arrowKey = if (showArrow) "${route.hashCode()}-${progress!!.nextStepIndex}-${System.identityHashCode(lanes)}" else ""
+        // Po spresnení cesty pod trasou (raz za chvíľu) sa šípka prekreslí len vtedy, keď sa naozaj posunula –
+        // inak by pri každom spresnení inde na trase poskočila.
+        val shaft = if (showArrow) route!!.stepAlong(progress!!.nextStepIndex).let { pathOf(route, it - 50, it + 35) } else null
+        if (arrowKey != shownArrowKey || (shaft != null && moved(shaft, shownShaft))) {
+            if (shaft != null) {
                 s.getSourceAs<GeoJsonSource>("arrow")?.setGeoJson(lineString(shaft))
                 val end = shaft.last()
                 val before = shaft.getOrNull(shaft.size - 2) ?: end
@@ -484,10 +492,13 @@ class NavMap(
                 s.getSourceAs<GeoJsonSource>("arrowhead")?.setGeoJson(EMPTY)
             }
             shownArrowKey = arrowKey
+            shownShaft = shaft
         }
 
-        if (lanes !== shownLaneView || (lanes != null && roadSide?.version != lanesSideVersion)) {
-            lanesSideVersion = roadSide?.version
+        // Pruhy nadväzujú na posun trasy na začiatku a konci – prekresliť len, keď sa tam zmenil.
+        val lanesBase = lanes?.let { "${(it.base(it.start) * 4).roundToInt()}-${(it.base(it.end) * 4).roundToInt()}" }
+        if (lanes !== shownLaneView || (lanes != null && lanesBase != lanesSideVersion)) {
+            lanesSideVersion = lanesBase
             if (lanes != null) {
                 val (lines, marks) = laneFeatures(lanes)
                 s.getSourceAs<GeoJsonSource>("lanes")?.setGeoJson(lines)
@@ -527,7 +538,7 @@ class NavMap(
                 if (alternatives.size < 2) EMPTY
                 else """{"type":"FeatureCollection","features":[${
                     alternatives.withIndex().filter { it.value !== route }.joinToString(",") { (i, r) ->
-                        """{"type":"Feature","properties":{"i":$i},"geometry":{"type":"LineString","coordinates":[${r.points.joinToString(",") { coord(it) }}]}}"""
+                        """{"type":"Feature","properties":{"i":$i},"geometry":{"type":"LineString","coordinates":[${RouteAxis(r).path(0.0, r.distance).joinToString(",") { coord(it) }}]}}"""
                     }
                 }]}"""
             )
@@ -623,9 +634,20 @@ class NavMap(
         val s = style ?: return
         val camera = map.cameraPosition
         val target = camera.target ?: return
-        if (camera.zoom < 15.5) return
+        if (camera.zoom < 15) return
         val center = GeoPoint(target.latitude, target.longitude)
         Crossings.request(center)
+        // Počas navigácie aj dopredu po trase, nech sú priechody načítané skôr, než k nim auto príde.
+        val route = NavigationController.route
+        val along = route?.let { routeAlong(it) }
+        if (route != null && along != null && (crossingsAhead.isNaN() || abs(along - crossingsAhead) > 500)) {
+            crossingsAhead = along
+            var a = along + 800
+            while (a < min(route.distance, along + CROSSINGS_AHEAD)) {
+                Crossings.request(route.pointAt(a))
+                a += 800
+            }
+        }
         val key = "${Crossings.version}-${Crossings.tileKey(center)}"
         if (key == shownCrossings) return
         shownCrossings = key
@@ -759,7 +781,7 @@ class NavMap(
     /** Časť trasy medzi dvoma vzdialenosťami; pred manévrom s pruhmi posunutá do správnych pruhov. */
     private fun pathOf(route: Route, from: Double, to: Double): List<GeoPoint> {
         val side = roadSide?.takeIf { it.route === route }
-        fun plain(a: Double, b: Double) = side?.path(a, b) ?: route.slice(a, b)
+        fun plain(a: Double, b: Double) = side?.path(a, b) ?: axisOf(route).path(a, b)
         val v = laneView?.takeIf { it.route === route }
         if (v == null || to <= v.start || from >= v.end) return plain(from, to)
         val result = ArrayList<GeoPoint>()
@@ -832,6 +854,29 @@ class NavMap(
             nearAlong = Double.NaN
         }
     }
+
+    /** Či sa čiara [now] líši od [before] viac ako o 30 cm (porovnanie v deviatich bodoch po dĺžke čiary). */
+    private fun moved(now: List<GeoPoint>, before: List<GeoPoint>?): Boolean {
+        if (before == null || before.size < 2 || now.size < 2) return true
+        fun at(line: List<GeoPoint>, f: Double): GeoPoint {
+            var total = 0.0
+            for (i in 1 until line.size) total += Geo.distance(line[i - 1], line[i])
+            var left = total * f
+            for (i in 1 until line.size) {
+                val d = Geo.distance(line[i - 1], line[i])
+                if (left <= d && d > 0) return Geo.interpolate(line[i - 1], line[i], left / d)
+                left -= d
+            }
+            return line.last()
+        }
+        return (0..8).any { Geo.distance(at(now, it / 8.0), at(before, it / 8.0)) > 0.3 }
+    }
+
+    /** Zaoblená os trasy (plynulé zákruty) aj mimo navigácie autom – v náhľade a pešo. */
+    private fun axisOf(route: Route): RouteAxis =
+        roadSide?.takeIf { it.route === route }?.axis
+            ?: routeAxis?.takeIf { it.route === route }
+            ?: RouteAxis(route).also { routeAxis = it }
 
     /** Kompas beží len pešo počas navigácie a kým je mapa vidieť. */
     private fun updateCompass(walking: Boolean) {
@@ -1135,7 +1180,7 @@ class NavMap(
         val side = roadSide?.takeIf { it.route === route }
         fun piece(a: Double, b: Double, level: Int) {
             if (b - a < 0.05) return
-            val points = side?.path(a, b) ?: route.slice(a, b)
+            val points = side?.path(a, b) ?: axisOf(route).path(a, b)
             if (points.size >= 2) features.add(feature(points, level, foot))
         }
         // Prvý úsek, ktorý končí za [from] (trasa môže mať tisíce bodov a časť pri aute sa kreslí na každej snímke).
@@ -1183,6 +1228,9 @@ class NavMap(
         private const val PULSE_FRAME_MS = 33L
         private const val PULSE_PERIOD_MS = 2000L
         private const val PULSE_M = 260.0
+        /** Ako ďaleko dopredu po trase sa počas navigácie načítavajú priechody pre chodcov. */
+        private const val CROSSINGS_AHEAD = 3000.0
+
         /** Ako ďaleko pred autom je podfarbený náš smer jazdy. */
         private const val TINT_AHEAD = 3000.0
 

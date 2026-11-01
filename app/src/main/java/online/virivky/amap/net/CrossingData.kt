@@ -10,7 +10,11 @@ import kotlin.math.min
 /** Priechod pre chodcov na ceste: poloha, smer cesty v stupňoch a trieda cesty (podľa nej šírka na mape). */
 class Crossing(val point: GeoPoint, val bearing: Double, val road: String)
 
-/** Priechody pre chodcov z OpenStreetMap (Overpass): vyznačené priechody a smer cesty, cez ktorú vedú. */
+/**
+ * Priechody pre chodcov z OpenStreetMap (Overpass): vyznačené priechody a smer cesty, cez ktorú vedú.
+ * Priechod býva zakreslený ako bod na ceste, alebo len ako chodník cez cestu (footway=crossing) –
+ * vtedy je priechod v bode, kde chodník cestu pretína (spoločný bod chodníka a cesty).
+ */
 object CrossingData {
     /** Priechody v obdĺžniku (juh, západ, sever, východ). */
     fun fetch(south: Double, west: Double, north: Double, east: Double): List<Crossing> {
@@ -18,10 +22,14 @@ object CrossingData {
         val query = "[out:json][timeout:25];" +
             "(node[highway=crossing][crossing!~\"^(unmarked|no|informal)$\"][\"crossing:markings\"!=\"no\"]($box);" +
             "node[highway=traffic_signals][crossing~\"^(traffic_signals|marked|zebra|uncontrolled)$\"]($box);)->.c;" +
-            "way(bn.c)[highway~\"^(trunk|primary|secondary|tertiary|unclassified|residential|living_street|service|road)(_link)?$\"];" +
-            "out body geom;.c out skel;"
+            "way[highway=footway][footway=crossing][crossing!~\"^(unmarked|no|informal)$\"][\"crossing:markings\"!=\"no\"]($box)->.f;" +
+            "node(w.f)->.fn;" +
+            "(way(bn.c)$ROADS;way(bn.fn)$ROADS;);out body geom;.c out skel;.f out skel;"
         return parse(RoadData.overpass(query))
     }
+
+    private const val ROADS =
+        "[highway~\"^(trunk|primary|secondary|tertiary|unclassified|residential|living_street|service|road)(_link)?$\"]"
 
     /** Z odpovede Overpass: pre každý priechod cesta, na ktorej leží, a jej smer v tom mieste. */
     fun parse(json: String): List<Crossing> {
@@ -29,7 +37,14 @@ object CrossingData {
         val crossingIds = HashSet<Long>()
         for (i in 0 until elements.length()) {
             val e = elements.getJSONObject(i)
-            if (e.optString("type") == "node") crossingIds.add(e.getLong("id"))
+            when {
+                e.optString("type") == "node" -> crossingIds.add(e.getLong("id"))
+                // Chodník cez cestu (bez značiek, „out skel“): priechod je vo vnútorných bodoch, kde ho pretína cesta.
+                e.optString("type") == "way" && e.optJSONObject("tags") == null -> {
+                    val nodes = e.optJSONArray("nodes") ?: continue
+                    for (k in 1 until nodes.length() - 1) crossingIds.add(nodes.getLong(k))
+                }
+            }
         }
         val seen = HashSet<Long>()
         val result = ArrayList<Crossing>()

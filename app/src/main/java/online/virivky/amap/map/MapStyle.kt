@@ -235,7 +235,7 @@ object MapStyle {
         // Priechod pre chodcov: 6 pruhov pozdĺž cesty na ~90 % jej šírky podľa triedy cesty, aby nepresahoval cez okraj.
         // [perBar] = násobí sa vlastnosťou „f“ (poloha pruhu od stredu cesty ako podiel šírky priechodu).
         fun byRoad(scale: Double, perBar: Boolean) = """["interpolate",["exponential",1.5],["zoom"],""" +
-            listOf(16, 17, 18, 19, 20).joinToString(",") { z ->
+            listOf(15, 16, 17, 18, 19, 20).joinToString(",") { z ->
                 fun w(stops: Array<Pair<Number, Number>>) = Math.round(widthAt(stops, z.toDouble()) * scale * 1000) / 1000.0
                 val match = """["match",["get","c"],"major",${w(majorStops)},"secondary",${w(secondaryStops)},""" +
                     """"service",${w(serviceStops)},${w(minorStops)}]"""
@@ -446,7 +446,7 @@ object MapStyle {
             // Priechody pre chodcov nad trasou (trasa ich neprekrýva, ako v AMap): každý pruh je krátka čiara
             // pozdĺž cesty posunutá od jej stredu, šírky podľa cesty – ani v 3D nepresahujú cez okraj cesty.
             add(
-                """{"id":"crossings","type":"line","source":"crossings","minzoom":16,
+                """{"id":"crossings","type":"line","source":"crossings","minzoom":15,
                 "layout":{"line-cap":"butt","line-join":"round"},
                 "paint":{"line-color":"$zebraColor","line-opacity":0.95,
                   "line-width":${byRoad(0.94 / 6 * 0.6, false)},"line-offset":${byRoad(0.94, true)}}}"""
