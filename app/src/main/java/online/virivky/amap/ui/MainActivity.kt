@@ -1192,6 +1192,10 @@ class MainActivity : Activity() {
             text = "Letecká mapa (fotky zhora, len Slovensko; viac mobilných dát)"
             isChecked = Settings.aerialMap
         }
+        val relief = CheckBox(this).apply {
+            text = "Reliéf terénu – tieňované kopce"
+            isChecked = Settings.relief
+        }
         val themeLabel = TextView(this).apply {
             text = "Farby mapy"
             textSize = 15f
@@ -1260,6 +1264,7 @@ class MainActivity : Activity() {
             addView(keyInput)
             addView(showTraffic)
             addView(aerialMap)
+            addView(relief)
             addView(themeLabel)
             addView(themes)
             addView(vehicleLabel)
@@ -1287,6 +1292,7 @@ class MainActivity : Activity() {
                 toleranceValues.getOrNull(tolerance.checkedRadioButtonId - 2000)?.let { Settings.speedTolerance = it }
                 Settings.showTraffic = showTraffic.isChecked
                 Settings.aerialMap = aerialMap.isChecked
+                Settings.relief = relief.isChecked
                 Settings.tomtomKey = key.ifEmpty { null }
                 if (key.isNotEmpty()) {
                     Toast.makeText(this, "Overujem kľúč…", Toast.LENGTH_SHORT).show()

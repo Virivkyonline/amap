@@ -130,6 +130,13 @@ object MapStyle {
     const val AERIAL_CREDIT = "© GKÚ, NLC"
 
     /**
+     * Výšky terénu pre tieňovanie (Terrain Tiles na AWS, verejné a bezplatné, kódovanie Terrarium):
+     * mapa z nich sama vypočíta tiene svahov.
+     */
+    private const val RELIEF_TILES = "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"
+    const val RELIEF_CREDIT = "Terrain Tiles (Mapzen, AWS)"
+
+    /**
      * Vrstvy pre leteckú mapu: fotky nad kreslenými plochami (tie ostanú mimo Slovenska), 3D domy preč
      * (strechy sú na fotke), cesty pri priblížení postupne zmiznú, chodníky a trasa ostanú.
      */
@@ -150,7 +157,9 @@ object MapStyle {
                 result.add(o.toString())
                 continue
             }
-            if (o.optString("source-layer") == "transportation" && o.optString("type") == "line" && id != "path" && id != "rail") {
+            if (o.optString("source-layer") == "transportation" && o.optString("type") == "line" &&
+                id !in setOf("path", "rail", "ferry", "aerialway", "aerialway-ticks")
+            ) {
                 if (id.contains("center-line") || id.contains("lane-divider")) {
                     (o.optJSONObject("layout") ?: JSONObject().also { o.put("layout", it) }).put("visibility", "none")
                 } else {
@@ -222,8 +231,9 @@ object MapStyle {
     /**
      * [trafficKey] = kľúč TomTom; ak je zadaný, na cesty sa prekreslí živá premávka.
      * [aerial] = letecká mapa: fotky zhora namiesto kreslených plôch, cesty pri priblížení zmiznú (vidieť ich na fotke).
+     * [relief] = tieňovanie terénu (kopce) zo Slovenska.
      */
-    fun json(dark: Boolean, trafficKey: String? = null, aerial: Boolean = false): String {
+    fun json(dark: Boolean, trafficKey: String? = null, aerial: Boolean = false, relief: Boolean = false): String {
         val c = if (dark) NIGHT else DAY
         // Od priblíženia 17 majú cesty skutočnú šírku (diaľnica 11 m na smer, hlavná 10 m, vedľajšia 8 m,
         // miestna 6,5 m, obslužná 4 m) a s každým stupňom sa zdvojnásobujú – ako v AMap pri jazde.
@@ -296,6 +306,30 @@ object MapStyle {
             add(road("secondary", "\"secondary\",\"tertiary\"", majorColor, width(*secondaryStops), 10))
             add(road("major", "\"primary\",\"trunk\"", majorColor, width(*majorStops), 8))
             add(road("motorway", "\"motorway\"", motorwayColor, width(*motorwayStops), 5))
+            // Mosty: tieň pod mostom a svetlý okraj, nad ostatnými cestami (cesta po moste ide hore).
+            fun bridge(id: String, classes: String, roadColor: String, stops: Array<Pair<Number, Number>>) {
+                val filter = """["all",["==",["get","brunnel"],"bridge"],["match",["get","class"],[$classes],true,false]]"""
+                add(
+                    """{"id":"bridge-$id-shadow","type":"line","source":"omt","source-layer":"transportation","minzoom":14,
+                    "filter":$filter,"layout":{"line-join":"round"},
+                    "paint":{"line-color":"#000000","line-opacity":${if (dark) 0.45 else 0.25},"line-width":${casing(*stops)},
+                      "line-translate":[1.5,3.5],"line-translate-anchor":"viewport"}}"""
+                )
+                add(
+                    """{"id":"bridge-$id-casing","type":"line","source":"omt","source-layer":"transportation","minzoom":14,
+                    "filter":$filter,"layout":{"line-join":"round"},
+                    "paint":{"line-color":"${edge ?: c.boundary}","line-width":${casing(*stops)}}}"""
+                )
+                add(
+                    """{"id":"bridge-$id","type":"line","source":"omt","source-layer":"transportation","minzoom":14,
+                    "filter":$filter,"layout":{"line-join":"round"},
+                    "paint":{"line-color":$roadColor,"line-width":${width(*stops)}}}"""
+                )
+            }
+            bridge("minor", "\"minor\",\"service\"", minorColor, minorStops)
+            bridge("secondary", "\"secondary\",\"tertiary\"", majorColor, secondaryStops)
+            bridge("major", "\"primary\",\"trunk\"", majorColor, majorStops)
+            bridge("motorway", "\"motorway\"", motorwayColor, motorwayStops)
             // Žltá prerušovaná stredová čiara na obojsmerných cestách.
             add(
                 """{"id":"center-line","type":"line","source":"omt","source-layer":"transportation","minzoom":16,
@@ -316,6 +350,25 @@ object MapStyle {
                 "filter":["match",["get","class"],["rail","transit"],true,false],
                 "paint":{"line-color":"${c.rail}","line-width":${width(12 to 1, 18 to 3)},"line-dasharray":[3,2]}}"""
             )
+            // Trajekty a lanovky či vleky (krátke priečky ako na turistických mapách).
+            add(
+                """{"id":"ferry","type":"line","source":"omt","source-layer":"transportation","minzoom":8,
+                "filter":["==",["get","class"],"ferry"],
+                "paint":{"line-color":"${if (dark) "#5b9be6" else "#3d7fd0"}","line-width":${linear(8 to 1, 14 to 2, 18 to 3)},"line-dasharray":[3,2]}}"""
+            )
+            val aerialway = """["any",["==",["get","class"],"aerialway"],["match",["get","subclass"],""" +
+                """["cable_car","gondola","chair_lift","drag_lift","t-bar","j-bar","platter","rope_tow","mixed_lift","zip_line","goods"],true,false]]"""
+            val aerialwayColor = if (dark) "#b9bfcc" else "#4a505c"
+            add(
+                """{"id":"aerialway","type":"line","source":"omt","source-layer":"transportation","minzoom":12,
+                "filter":$aerialway,
+                "paint":{"line-color":"$aerialwayColor","line-width":${linear(12 to 1, 16 to 1.6, 18 to 2.2)}}}"""
+            )
+            add(
+                """{"id":"aerialway-ticks","type":"line","source":"omt","source-layer":"transportation","minzoom":14,
+                "filter":$aerialway,
+                "paint":{"line-color":"$aerialwayColor","line-width":${linear(14 to 5, 18 to 8)},"line-dasharray":[0.2,7]}}"""
+            )
         }
 
         val layers = buildList {
@@ -325,6 +378,22 @@ object MapStyle {
                 "filter":["match",["get","class"],["residential","suburb","neighbourhood","commercial","retail","industrial"],true,false],
                 "paint":{"fill-color":${color(c.residential, c.residentialNear)}}}"""
             )
+            // Plochy podľa využitia: cintoríny, nemocnice, školy, športoviská, armáda, lomy, železnice.
+            listOf(
+                arrayOf("cemetery", "\"cemetery\"", "#d3e2cf", "#223229"),
+                arrayOf("hospital", "\"hospital\"", "#f5dfe2", "#382a31"),
+                arrayOf("school", "\"school\",\"university\",\"college\",\"kindergarten\"", "#f2ead0", "#33311f"),
+                arrayOf("sport", "\"stadium\",\"pitch\",\"playground\",\"track\"", "#cde9d2", "#1d3a2a"),
+                arrayOf("military", "\"military\"", "#f1d9d6", "#3a2727"),
+                arrayOf("quarry", "\"quarry\"", "#dcd6cc", "#2f2c28"),
+                arrayOf("railway", "\"railway\",\"garages\"", "#e0e2e8", "#262a33"),
+            ).forEach { (id, classes, day, night) ->
+                add(
+                    """{"id":"landuse-$id","type":"fill","source":"omt","source-layer":"landuse","minzoom":12,
+                    "filter":["match",["get","class"],[$classes],true,false],
+                    "paint":{"fill-color":"${if (dark) night else day}","fill-opacity":${linear(12 to 0, 13 to 1)}}}"""
+                )
+            }
             add(
                 """{"id":"wood","type":"fill","source":"omt","source-layer":"landcover",
                 "filter":["match",["get","class"],["wood","forest"],true,false],
@@ -335,11 +404,49 @@ object MapStyle {
                 "filter":["match",["get","class"],["grass","farmland","wetland"],true,false],
                 "paint":{"fill-color":"${c.park}","fill-opacity":0.7}}"""
             )
+            // Kosodrevina a vresoviská, skaly, piesok, ľad.
+            listOf(
+                arrayOf("scrub", "subclass", "\"scrub\",\"heath\"", "#b5d6a2", "#22382b"),
+                arrayOf("rock", "class", "\"rock\"", "#dcd9d3", "#2d2e33"),
+                arrayOf("sand", "class", "\"sand\"", "#eee2bf", "#3a3527"),
+                arrayOf("ice", "class", "\"ice\"", "#eef6fa", "#2b3542"),
+            ).forEach { (id, key, classes, day, night) ->
+                add(
+                    """{"id":"landcover-$id","type":"fill","source":"omt","source-layer":"landcover",
+                    "filter":["match",["get","$key"],[$classes],true,false],
+                    "paint":{"fill-color":"${if (dark) night else day}"}}"""
+                )
+            }
             add("""{"id":"park","type":"fill","source":"omt","source-layer":"park","paint":{"fill-color":"${c.park}"}}""")
             add("""{"id":"water","type":"fill","source":"omt","source-layer":"water","paint":{"fill-color":"${c.water}"}}""")
             add(
                 """{"id":"waterway","type":"line","source":"omt","source-layer":"waterway","minzoom":10,
                 "paint":{"line-color":"${c.water}","line-width":${width(10 to 1, 18 to 6)}}}"""
+            )
+            // Tieňovanie terénu (reliéf) z výškových dát – tieň len na svahoch, rovina ostane bez zmeny farby;
+            // pri jazde v meste slabšie.
+            if (relief && !aerial) {
+                add(
+                    """{"id":"relief","type":"hillshade","source":"relief","minzoom":8,
+                    "paint":{"hillshade-exaggeration":${linear(8 to 0.0, 9.5 to 0.55, 13 to 0.5, 15 to 0.35, 17 to 0.15)},
+                      "hillshade-illumination-direction":315,
+                      "hillshade-shadow-color":"${if (dark) "rgba(0,0,0,0.55)" else "rgba(38,58,48,0.42)"}",
+                      "hillshade-highlight-color":"${if (dark) "rgba(150,170,190,0.10)" else "rgba(255,255,255,0.35)"}",
+                      "hillshade-accent-color":"${if (dark) "rgba(0,0,0,0.25)" else "rgba(60,80,70,0.25)"}"}}"""
+                )
+            }
+            // Letiská: vzletové a rolovacie dráhy.
+            val runway = if (dark) "#3a4254" else "#cfd4dd"
+            add(
+                """{"id":"aeroway-area","type":"fill","source":"omt","source-layer":"aeroway","minzoom":11,
+                "filter":["all",["==",["geometry-type"],"Polygon"],["match",["get","class"],["runway","taxiway","apron"],true,false]],
+                "paint":{"fill-color":"$runway"}}"""
+            )
+            add(
+                """{"id":"aeroway-line","type":"line","source":"omt","source-layer":"aeroway","minzoom":11,
+                "filter":["all",["==",["geometry-type"],"LineString"],["match",["get","class"],["runway","taxiway"],true,false]],
+                "paint":{"line-color":"$runway",
+                  "line-width":["interpolate",["exponential",1.5],["zoom"],11,["match",["get","class"],"runway",3,1],17,["match",["get","class"],"runway",45,15]]}}"""
             )
             add(
                 """{"id":"building","type":"fill","source":"omt","source-layer":"building","minzoom":14,"maxzoom":15.5,
@@ -352,6 +459,16 @@ object MapStyle {
                     "paint":{"raster-opacity":${linear(8 to 0.75, 14 to 0.9)}}}"""
                 )
             }
+            // Šípky v smere jazdy na jednosmerných uliciach.
+            add(
+                """{"id":"oneway","type":"symbol","source":"omt","source-layer":"transportation","minzoom":16,
+                "filter":["all",["match",["get","oneway"],[1,-1],true,false],
+                  ["match",["get","class"],["primary","secondary","tertiary","minor","service"],true,false],$NOT_TUNNEL],
+                "layout":{"symbol-placement":"line","symbol-spacing":${linear(16 to 90, 19 to 170)},"icon-image":"oneway",
+                  "icon-rotate":["match",["get","oneway"],-1,180,0],"icon-rotation-alignment":"map",
+                  "icon-allow-overlap":true,"icon-ignore-placement":true,"icon-size":${linear(16 to 0.6, 18 to 0.9, 20 to 1.3)}},
+                "paint":{"icon-opacity":0.75}}"""
+            )
             add(
                 """{"id":"boundary","type":"line","source":"omt","source-layer":"boundary",
                 "filter":["all",["<=",["get","admin_level"],2],["!=",["get","maritime"],1]],
@@ -510,6 +627,47 @@ object MapStyle {
                   "icon-size":["interpolate",["exponential",2],["zoom"],15,["*",0.092,["get","s"]],22,["*",11.7,["get","s"]]]}}"""
             )
 
+            // Čísla domov pri veľkom priblížení.
+            add(
+                """{"id":"housenumber","type":"symbol","source":"omt","source-layer":"housenumber","minzoom":17,
+                "layout":{"text-field":["get","housenumber"],"text-font":["Noto Sans Regular"],"text-size":${linear(17 to 10, 19 to 12)}},
+                "paint":{"text-color":"${if (dark) "#8f98aa" else "#6b7380"}","text-halo-color":"${c.halo}","text-halo-width":1}}"""
+            )
+            // Body záujmu priamo v mape: pumpy, nabíjačky, parkoviská, jedlo, obchody, ubytovanie, lekárne,
+            // bankomaty, nemocnice a stanice – malé okrúhle ikony s názvom.
+            add(
+                """{"id":"poi-base","type":"symbol","source":"omt","source-layer":"poi","minzoom":15,
+                "filter":["any",
+                  ["match",["get","class"],["fuel","parking","restaurant","fast_food","cafe","grocery","lodging","pharmacy","bank","hospital"],true,false],
+                  ["match",["get","subclass"],["supermarket","convenience","atm","charging_station","station","halt"],true,false]],
+                "layout":{"icon-image":["case",
+                    ["==",["get","subclass"],"charging_station"],"b-ev",
+                    ["match",["get","subclass"],["station","halt"],true,false],"b-train",
+                    ["==",["get","subclass"],"atm"],"b-atm",
+                    ["match",["get","subclass"],["supermarket","convenience"],true,false],"b-shop",
+                    ["match",["get","class"],
+                      "fuel","b-fuel","parking","b-parking","restaurant","b-food","fast_food","b-food","cafe","b-cafe",
+                      "grocery","b-shop","lodging","b-hotel","pharmacy","b-pharmacy","bank","b-atm","hospital","b-hospital",""]],
+                  "icon-size":${linear(15 to 0.8, 18 to 1.0)},"symbol-sort-key":["coalesce",["get","rank"],99],
+                  "text-field":$NAME,"text-font":["Noto Sans Regular"],"text-size":11,"text-offset":[0,1.2],
+                  "text-anchor":"top","text-optional":true,"text-max-width":8},
+                "paint":{"text-color":"${if (dark) "#c3cad6" else "#4a5160"}","text-halo-color":"${c.halo}","text-halo-width":1.3}}"""
+            )
+            // Vrcholy s výškou a letiská.
+            add(
+                """{"id":"peak","type":"symbol","source":"omt","source-layer":"mountain_peak","minzoom":11,
+                "filter":["match",["get","class"],["peak","volcano"],true,false],
+                "layout":{"icon-image":"peak","icon-size":0.9,"symbol-sort-key":["coalesce",["get","rank"],99],
+                  "text-field":["case",["has","ele"],["concat",$NAME,"\n",["to-string",["get","ele"]]," m"],$NAME],
+                  "text-font":["Noto Sans Regular"],"text-size":11,"text-offset":[0,0.8],"text-anchor":"top","text-optional":true},
+                "paint":{"text-color":"${if (dark) "#d2c3a4" else "#6b4f2a"}","text-halo-color":"${c.halo}","text-halo-width":1.3}}"""
+            )
+            add(
+                """{"id":"airport","type":"symbol","source":"omt","source-layer":"aerodrome_label","minzoom":9,
+                "layout":{"icon-image":"airport","text-field":$NAME,"text-font":["Noto Sans Regular"],"text-size":11,
+                  "text-offset":[0,1.1],"text-anchor":"top","text-optional":true},
+                "paint":{"text-color":"${if (dark) "#c3cad6" else "#4a5160"}","text-halo-color":"${c.halo}","text-halo-width":1.3}}"""
+            )
             // Popisy ciest a miest.
             add(
                 """{"id":"road-label","type":"symbol","source":"omt","source-layer":"transportation_name","minzoom":13,
@@ -640,6 +798,8 @@ object MapStyle {
             ""","route-head":{"type":"geojson","lineMetrics":true,"data":$EMPTY}""" +
             ""","route-pulse":{"type":"geojson","lineMetrics":true,"data":$EMPTY}""" +
             ""","route-tint":{"type":"geojson","data":$EMPTY}""" + traffic +
+            (if (relief && !aerial) ""","relief":{"type":"raster-dem","encoding":"terrarium","tileSize":256,"maxzoom":15,
+              "attribution":"$RELIEF_CREDIT","tiles":["$RELIEF_TILES"]}""" else "") +
             if (aerial) ""","aerial":{"type":"raster","tileSize":256,"minzoom":8,"maxzoom":20,"attribution":"$AERIAL_CREDIT",
               "tiles":["$AERIAL_TILES"]}""" else ""
         val all = layers.flatMap { listOf(it) + listOfNotNull(nearCopy(it)) }

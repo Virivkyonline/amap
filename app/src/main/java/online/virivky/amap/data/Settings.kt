@@ -29,6 +29,14 @@ object Settings {
             listeners.forEach { it() }
         }
 
+    /** Tieňovanie terénu (reliéf kopcov). */
+    var relief: Boolean
+        get() = prefs.getBoolean("relief", true)
+        set(value) {
+            prefs.edit().putBoolean("relief", value).apply()
+            listeners.forEach { it() }
+        }
+
     /** Letecká mapa: fotky zhora (ortofotomozaika SR) pod cestami a trasou. */
     var aerialMap: Boolean
         get() = prefs.getBoolean("aerial_map", false)

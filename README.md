@@ -46,6 +46,10 @@ Vlastná navigácia **lech-map** pre Android, ktorá funguje aj v **Android Auto
   nad zelenou trasou aj nad pruhmi (trasa ich neprekrýva); aj priechody zakreslené len ako chodník cez cestu,
   počas navigácie sa načítavajú 3 km dopredu po trase
 - trasa, šípka odbočky aj auto idú v zákrutách **plynulým oblúkom** (nie ostrým zlomom)
+- v mape aj **body záujmu** (pumpy, nabíjačky, parkoviská, jedlo, potraviny, ubytovanie, lekárne, bankomaty,
+  nemocnice, stanice), **šípky na jednosmerkách**, **čísla domov**, **mosty** s tieňom, plochy (cintoríny,
+  nemocnice, školy, ihriská, lomy), **vrcholy s výškou**, skaly, kosodrevina, **lanovky a vleky**, trajekty a letiská
+- **reliéf terénu** (tieňované kopce, dá sa vypnúť v nastaveniach)
 - **tunely a podjazdy** sú na mape ako svetlejší polopriehľadný pás s prerušovanými okrajmi; v tuneli bez
   signálu ide auto po trase podľa poslednej rýchlosti a nepresné polohy (zo siete) neberie
 - počas navigácie sa mapa po posunutí prstom (aj náhodnom dotyku) po 10 s sama vráti na polohu
@@ -167,6 +171,7 @@ sa služby hľadajú v OpenStreetMap – nájdu sa tiež, len bez obsadenosti na
 |------|--------|
 | mapa (vektorové dlaždice, písma) | OpenFreeMap (tiles.openfreemap.org), vykresľuje MapLibre |
 | letecká mapa | ortofotomozaika SR (© GKÚ, NLC) z dlaždíc Freemap Slovakia (ofmozaika.tiles.freemap.sk) |
+| reliéf terénu | výšky Terrain Tiles (Mapzen, AWS Open Data – s3.amazonaws.com/elevation-tiles-prod) |
 | vyhľadávanie, adresa bodu | TomTom Search (s kľúčom), inak Nominatim (nominatim.openstreetmap.org) |
 | výpočet trasy, jazdné pruhy | TomTom (s kľúčom, podľa premávky), inak OSRM (router.project-osrm.org) |
 | farby premávky na cestách | TomTom Traffic Flow (s kľúčom) |

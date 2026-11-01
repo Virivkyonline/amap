@@ -7,7 +7,8 @@ nepredáva ani nezdieľa na iné účely.
   miest, premávku a počasie sa súradnice (odkiaľ, kam, okolie) posielajú službám, ktoré to
   počítajú: TomTom (ak používateľ zadá vlastný kľúč), OSRM / OpenStreetMap (router.project-osrm.org,
   routing.openstreetmap.de, nominatim.openstreetmap.org, photon.komoot.io, overpass-api.de),
-  OpenFreeMap (mapové dlaždice), Freemap Slovakia (dlaždice leteckej mapy, ak je zapnutá)
+  OpenFreeMap (mapové dlaždice), Freemap Slovakia (dlaždice leteckej mapy, ak je zapnutá), Amazon S3
+  (výškové dlaždice Terrain Tiles pre reliéf terénu, ak je zapnutý)
   a Open-Meteo (počasie). Tieto služby dostávajú len údaje potrebné
   na odpoveď.
 - **Uložené miesta, nastavenia a kľúč TomTom** sú uložené len v telefóne.

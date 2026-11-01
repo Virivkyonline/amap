@@ -252,6 +252,7 @@ class DriveHud @JvmOverloads constructor(context: Context, attrs: AttributeSet? 
         text.textAlign = Paint.Align.LEFT
         val label = "© OpenStreetMap · OpenFreeMap" + (if (Settings.tomtomKey != null) " · © TomTom" else "") +
             (if (Settings.aerialMap) " · ${MapStyle.AERIAL_CREDIT}" else "") +
+            (if (Settings.relief && !Settings.aerialMap) " · ${MapStyle.RELIEF_CREDIT}" else "") +
             if (showVersion && version.isNotEmpty()) " · lech-map v$version" else ""
         canvas.drawText(label, area.left + 8 * dp, area.bottom - 6 * dp, text)
         text.textAlign = Paint.Align.CENTER

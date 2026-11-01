@@ -40,7 +40,17 @@ object MapIcons {
             canvas(30f, 30f) { w, h -> IncidentIcons.draw(this, name, w / 2, h / 2, w - 4f) }
         } + LaneMarks.arrows.mapValues { (_, angle) ->
             canvas(24f, 56f) { w, h -> LaneMarks.arrow(this, angle, w, h) }
-        } + mapOf("lane-x" to canvas(24f, 24f) { w, h -> LaneMarks.cross(this, w, h) })
+        } + mapOf("lane-x" to canvas(24f, 24f) { w, h -> LaneMarks.cross(this, w, h) }) + mapOf(
+            "oneway" to canvas(20f, 12f) { w, h -> oneway(this, w, h) },
+            "peak" to canvas(14f, 12f) { w, h -> peak(this, w, h) },
+            "airport" to canvas(22f, 22f) { w, h -> badge(this, w, h, 0xFF4A6FA5.toInt()) { cx, cy, r -> plane(this, cx, cy, r) } },
+            "b-hospital" to canvas(20f, 20f) { w, h -> badge(this, w, h, 0xFFE0453A.toInt()) { cx, cy, r -> cross(this, cx, cy, r) } },
+            "b-train" to canvas(20f, 20f) { w, h -> badge(this, w, h, 0xFF4A6FA5.toInt()) { cx, cy, r -> train(this, cx, cy, r) } },
+        ) + PoiCategory.entries.associate { category ->
+            "b-${category.key}" to canvas(20f, 20f) { w, h ->
+                badge(this, w, h, category.color) { cx, cy, r -> PoiIcons.glyph(this, category, cx, cy, r * 1.25f, category.color) }
+            }
+        }
     }
 
     /** Ikona polohy podľa nastavení (auto, motorka či šípka v zvolenej farbe). */
@@ -177,6 +187,105 @@ object MapIcons {
         arms.lineTo(cx + s * 0.06f, cy - s * 0.22f)
         arms.lineTo(cx + s * 0.32f, cy - s * 0.02f)
         c.drawPath(arms, body)
+    }
+
+    /** Šípka na jednosmernej ulici (doprava = v smere čiary cesty). */
+    private fun oneway(c: Canvas, w: Float, h: Float) {
+        val p = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.argb(0xE6, 0xDD, 0xE3, 0xEC)
+            style = Paint.Style.STROKE
+            strokeWidth = h * 0.16f
+            strokeCap = Paint.Cap.ROUND
+            strokeJoin = Paint.Join.ROUND
+        }
+        c.drawLine(w * 0.12f, h / 2, w * 0.82f, h / 2, p)
+        val head = Path()
+        head.moveTo(w * 0.6f, h * 0.18f)
+        head.lineTo(w * 0.88f, h / 2)
+        head.lineTo(w * 0.6f, h * 0.82f)
+        c.drawPath(head, p)
+    }
+
+    /** Vrchol: hnedý trojuholník so svetlým okrajom. */
+    private fun peak(c: Canvas, w: Float, h: Float) {
+        val path = Path()
+        path.moveTo(w / 2, h * 0.12f)
+        path.lineTo(w * 0.92f, h * 0.88f)
+        path.lineTo(w * 0.08f, h * 0.88f)
+        path.close()
+        c.drawPath(path, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF8A5A2B.toInt() })
+        c.drawPath(path, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+            style = Paint.Style.STROKE
+            strokeWidth = 1.2f
+            strokeJoin = Paint.Join.ROUND
+        })
+    }
+
+    /** Malá okrúhla ikona bodu záujmu v mape: farebný kruh s bielym okrajom a bielym symbolom. */
+    private fun badge(c: Canvas, w: Float, h: Float, color: Int, glyph: (Float, Float, Float) -> Unit) {
+        val cx = w / 2
+        val cy = h / 2
+        val r = w / 2 - 1.5f
+        val p = Paint(Paint.ANTI_ALIAS_FLAG)
+        p.color = Color.argb(0x40, 0, 0, 0)
+        c.drawCircle(cx, cy + 0.8f, r + 1f, p)
+        p.color = Color.WHITE
+        c.drawCircle(cx, cy, r + 1f, p)
+        p.color = color
+        c.drawCircle(cx, cy, r - 0.4f, p)
+        glyph(cx, cy, r)
+    }
+
+    /** Biely kríž (nemocnica). */
+    private fun cross(c: Canvas, cx: Float, cy: Float, r: Float) {
+        val p = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
+        val a = r * 0.55f
+        val b = r * 0.18f
+        c.drawRect(cx - b, cy - a, cx + b, cy + a, p)
+        c.drawRect(cx - a, cy - b, cx + a, cy + b, p)
+    }
+
+    /** Vlak spredu (stanica). */
+    private fun train(c: Canvas, cx: Float, cy: Float, r: Float) {
+        val p = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
+        c.drawRoundRect(RectF(cx - r * 0.45f, cy - r * 0.6f, cx + r * 0.45f, cy + r * 0.38f), r * 0.15f, r * 0.15f, p)
+        val dark = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF4A6FA5.toInt() }
+        c.drawRect(cx - r * 0.32f, cy - r * 0.45f, cx + r * 0.32f, cy - r * 0.08f, dark)
+        c.drawCircle(cx - r * 0.24f, cy + r * 0.16f, r * 0.08f, dark)
+        c.drawCircle(cx + r * 0.24f, cy + r * 0.16f, r * 0.08f, dark)
+        val legs = Paint(p).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = r * 0.12f
+            strokeCap = Paint.Cap.ROUND
+        }
+        c.drawLine(cx - r * 0.25f, cy + r * 0.45f, cx - r * 0.42f, cy + r * 0.68f, legs)
+        c.drawLine(cx + r * 0.25f, cy + r * 0.45f, cx + r * 0.42f, cy + r * 0.68f, legs)
+    }
+
+    /** Lietadlo zhora (letisko). */
+    private fun plane(c: Canvas, cx: Float, cy: Float, r: Float) {
+        val p = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
+        val path = Path()
+        path.moveTo(cx, cy - r * 0.7f)
+        path.quadTo(cx + r * 0.1f, cy - r * 0.6f, cx + r * 0.1f, cy - r * 0.2f)
+        path.lineTo(cx + r * 0.7f, cy + r * 0.12f)
+        path.lineTo(cx + r * 0.7f, cy + r * 0.28f)
+        path.lineTo(cx + r * 0.1f, cy + r * 0.12f)
+        path.lineTo(cx + r * 0.08f, cy + r * 0.45f)
+        path.lineTo(cx + r * 0.28f, cy + r * 0.62f)
+        path.lineTo(cx + r * 0.28f, cy + r * 0.72f)
+        path.lineTo(cx, cy + r * 0.62f)
+        path.lineTo(cx - r * 0.28f, cy + r * 0.72f)
+        path.lineTo(cx - r * 0.28f, cy + r * 0.62f)
+        path.lineTo(cx - r * 0.08f, cy + r * 0.45f)
+        path.lineTo(cx - r * 0.1f, cy + r * 0.12f)
+        path.lineTo(cx - r * 0.7f, cy + r * 0.28f)
+        path.lineTo(cx - r * 0.7f, cy + r * 0.12f)
+        path.lineTo(cx - r * 0.1f, cy - r * 0.2f)
+        path.quadTo(cx - r * 0.1f, cy - r * 0.6f, cx, cy - r * 0.7f)
+        path.close()
+        c.drawPath(path, p)
     }
 
     /** Modrá bodka pre polohu bez známeho smeru. */
