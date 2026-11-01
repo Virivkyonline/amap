@@ -683,16 +683,27 @@ class NavMap(
             if (points.size < 2) return
             lines.add("""{"type":"Feature","properties":{"k":"$kind","w":$width},"geometry":{"type":"LineString","coordinates":[${points.joinToString(",") { coord(it) }}]}}""")
         }
-        fun along(offset: Double, from: Double = v.start) = v.path(from, v.stop) { offset }
-        line("surface", n * w, along(v.left + n * w / 2))
+        // Plochy (povrch pruhov, zelené pruhy) ako mnohouholníky – na začiatku sa plynulo rozširujú.
+        fun area(kind: String, ring: List<GeoPoint>) {
+            if (ring.size < 4) return
+            lines.add("""{"type":"Feature","properties":{"k":"$kind"},"geometry":{"type":"Polygon","coordinates":[[${ring.joinToString(",") { coord(it) }}]]}}""")
+        }
+        fun edgeLine(i: Int, inset: Double) = v.path(v.start, v.stop) { v.edge(i, it) + inset }
+        area("surface", v.band(v.start, v.stop, { v.edge(0, it) }, { v.edge(n, it) }))
         // Trasa vchádza do správnych pruhov plynulo; pri viacerých správnych pruhoch smeruje do ich stredu.
         val good = (0 until n).filter { v.good[it] }
-        line("good", w - 0.5, v.path(v.start, v.start + v.ramp, v::shiftAt))
-        for (i in good) line("good", w - 0.5, along(v.left + (i + 0.5) * w, v.start + v.ramp * 0.6))
-        for (i in 1 until n) line("sep", 0.16, along(v.left + i * w))
+        // Nábeh: na začiatku široký ako trasa (nadviaže na ňu), na konci ako pruh.
+        val halfLane = { at: Double ->
+            val lane = ((v.edge(n, at) - v.edge(0, at)) / n - 0.5) / 2
+            val t = ((at - v.start) / v.ramp).coerceIn(0.0, 1.0)
+            ROUTE_HALF_WIDTH + (lane - ROUTE_HALF_WIDTH) * t * t * (3 - 2 * t)
+        }
+        area("good", v.band(v.start, v.start + v.ramp, { v.shiftAt(it) - halfLane(it) }, { v.shiftAt(it) + halfLane(it) }))
+        for (i in good) area("good", v.band(v.start + v.ramp, v.stop, { v.edge(i, it) + 0.25 }, { v.edge(i + 1, it) - 0.25 }))
+        for (i in 1 until n) line("sep", 0.16, edgeLine(i, 0.0))
         // Na obojsmernej ceste je ľavým okrajom stredová čiara z mapy.
-        if (v.left < 0) line("edge", 0.3, along(v.left + 0.15))
-        line("edge", 0.3, along(v.left + n * w - 0.15))
+        if (v.left < 0) line("edge", 0.3, edgeLine(0, 0.15))
+        line("edge", 0.3, edgeLine(n, -0.15))
 
         val marks = ArrayList<String>()
         val scale = (w / 3.5).coerceIn(0.6, 1.0)
@@ -701,9 +712,8 @@ class NavMap(
             marks.add(point(v.pointAt(at, offset), """"icon":"$icon","bearing":${v.bearingAt(at)},"s":$scale"""))
         }
         step.lanes.forEachIndexed { i, lane ->
-            val center = v.left + (i + 0.5) * w
-            mark(v.end - 70, center, laneIcon(lane, step.modifier))
-            if (!lane.valid) mark(v.end - 25, center, "lane-x")
+            mark(v.end - 70, v.laneCenter(i, v.end - 70), laneIcon(lane, step.modifier))
+            if (!lane.valid) mark(v.end - 25, v.laneCenter(i, v.end - 25), "lane-x")
         }
         return """{"type":"FeatureCollection","features":[${lines.joinToString(",")}]}""" to
             """{"type":"FeatureCollection","features":[${marks.joinToString(",")}]}"""
@@ -1228,6 +1238,9 @@ class NavMap(
         private const val PULSE_FRAME_MS = 33L
         private const val PULSE_PERIOD_MS = 2000L
         private const val PULSE_M = 260.0
+        /** Polovica šírky zelenej trasy pri jazde v metroch (čiara 16,5 px pri priblížení 18). */
+        private const val ROUTE_HALF_WIDTH = 1.63
+
         /** Ako ďaleko dopredu po trase sa počas navigácie načítavajú priechody pre chodcov. */
         private const val CROSSINGS_AHEAD = 3000.0
 

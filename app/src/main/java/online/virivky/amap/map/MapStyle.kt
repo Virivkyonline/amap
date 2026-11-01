@@ -145,7 +145,8 @@ object MapStyle {
             if (id == "building-3d") continue
             if (id == "route-tint" || id == "lanes-surface") {
                 // Na fotke len jemne, nech cesta presvitá.
-                o.getJSONObject("paint").put("line-opacity", if (id == "route-tint") JSONArray(linear(14.5 to 0, 15.5 to 0.5)) else 0.6)
+                if (id == "route-tint") o.getJSONObject("paint").put("line-opacity", JSONArray(linear(14.5 to 0, 15.5 to 0.5)))
+                else o.getJSONObject("paint").put("fill-opacity", 0.6)
                 result.add(o.toString())
                 continue
             }
@@ -403,14 +404,12 @@ object MapStyle {
             // Pruhy pred manévrom (pohľad na pruhy): nad trasou, ale pod čiarami cesty a priechodmi pre chodcov,
             // ktoré idú cez celú cestu. Posuny do strany sú už v tvare čiar (NavMap), preto bez line-offset.
             add(
-                """{"id":"lanes-surface","type":"line","source":"lanes","minzoom":15,"filter":["==",["get","k"],"surface"],
-                "layout":{"line-cap":"butt","line-join":"round"},
-                "paint":{"line-color":"$TINT","line-width":${meters("w")}}}"""
+                """{"id":"lanes-surface","type":"fill","source":"lanes","minzoom":15,"filter":["==",["get","k"],"surface"],
+                "paint":{"fill-color":"$TINT"}}"""
             )
             add(
-                """{"id":"lanes-good","type":"line","source":"lanes","minzoom":15,"filter":["==",["get","k"],"good"],
-                "layout":{"line-cap":"butt","line-join":"round"},
-                "paint":{"line-color":"${c.route}","line-opacity":0.95,"line-width":${meters("w")}}}"""
+                """{"id":"lanes-good","type":"fill","source":"lanes","minzoom":15,"filter":["==",["get","k"],"good"],
+                "paint":{"fill-color":"${c.route}","fill-opacity":0.95}}"""
             )
             add(
                 """{"id":"lanes-sep","type":"line","source":"lanes","minzoom":15,"filter":["==",["get","k"],"sep"],

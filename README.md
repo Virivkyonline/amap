@@ -39,8 +39,9 @@ Vlastná navigácia **lech-map** pre Android, ktorá funguje aj v **Android Auto
 - pohľad počas jazdy: **3D**, **2D v smere jazdy** alebo **2D sever hore** (tlačidlo 3D/2D/S);
   farby mapy **automaticky podľa slnka** (v aute podľa auta), stále denné alebo nočné
 - jazdné pruhy pred odbočkou (ktorým pruhom ísť) a **pohľad na pruhy na mape**: pred odbočkou sa mapa
-  priblíži, cesta sa rozdelí na pruhy (v šírke cesty z mapy; na obojsmernej ceste v pravej polovici),
-  trasa aj auto plynulo prejdú do správneho zeleného pruhu, na pruhoch biele šípky a červené X
+  priblíži, cesta sa rozdelí na pruhy (v šírke cesty z mapy; na obojsmernej ceste v pravej polovici;
+  keď sa nezmestia, plynulo sa rozšíria ako odbočovací pruh), trasa aj auto plynulo prejdú do správneho
+  zeleného pruhu, na pruhoch biele šípky a červené X
 - **priechody pre chodcov** (zebry z OpenStreetMap) pri priblížení mapy: biele pruhy cez celú cestu, nakreslené
   nad zelenou trasou aj nad pruhmi (trasa ich neprekrýva); aj priechody zakreslené len ako chodník cez cestu,
   počas navigácie sa načítavajú 3 km dopredu po trase

@@ -32,6 +32,9 @@ class LaneView private constructor(
     val good: BooleanArray,
     /** Os trasy (zaoblená v rohoch, [RoadSide.axisAt]), z ktorej sa pruhy počítajú. */
     axis: (Double) -> GeoPoint,
+    /** Okraje nášho smeru jazdy podľa mapy – na začiatku pruhy začínajú v šírke cesty. */
+    private val roadLeft: Double,
+    private val roadRight: Double,
 ) {
     val lanes = good.size
 
@@ -40,6 +43,26 @@ class LaneView private constructor(
 
     /** Dĺžka plynulého prechodu trasy do pruhov. */
     val ramp = min(RAMP, (stop - start) / 2)
+
+    /** Na akej dĺžke sa pruhy plynulo rozšíria zo šírky cesty na svoju šírku (ako odbočovací pruh). */
+    private val taper = min(TAPER, (stop - start) * 0.4)
+
+    /**
+     * Hranica pruhov [i] (0 = ľavý okraj, [lanes] = pravý) v mieste [along]: na začiatku v šírke cesty
+     * z mapy, potom sa plynulo rozšíri na šírku pruhov (ak sa do cesty nezmestia).
+     */
+    fun edge(i: Int, along: Double): Double {
+        val full = left + i * laneWidth
+        val narrow = roadLeft + i * (roadRight - roadLeft) / lanes
+        val f = if (taper <= 0) 1.0 else ease(((along - start) / taper).coerceIn(0.0, 1.0))
+        return narrow + (full - narrow) * f
+    }
+
+    /** Stred pruhu [i] v mieste [along]. */
+    fun laneCenter(i: Int, along: Double) = (edge(i, along) + edge(i + 1, along)) / 2
+
+    /** Stred správnych pruhov v mieste [along]. */
+    private fun goodCenter(along: Double) = good.indices.filter { good[it] }.map { laneCenter(it, along) }.average()
 
     private val count = max(1, ceil((end - start) / STEP).toInt())
     private val points: Array<GeoPoint>
@@ -80,9 +103,19 @@ class LaneView private constructor(
     /** Posun trasy do strany v mieste [along]: nábeh do pruhov, pruhy a za stop čiarou späť na posun mimo pruhov. */
     fun shiftAt(along: Double): Double = when {
         along <= start || along >= end -> base(along)
-        along < start + ramp -> base(start).let { it + (shift - it) * ease((along - start) / ramp) }
-        along <= stop -> shift
-        else -> base(end).let { it + (shift - it) * ease((end - along) / (end - stop)) }
+        along < start + ramp -> base(start).let { it + (goodCenter(along) - it) * ease((along - start) / ramp) }
+        along <= stop -> goodCenter(along)
+        else -> base(end).let { it + (goodCenter(stop) - it) * ease((end - along) / (end - stop)) }
+    }
+
+    /**
+     * Plocha medzi dvoma čiarami pozdĺž osi (od [from] po [to]): vľavo [leftOf], vpravo [rightOf]
+     * (posuny doprava v mieste along) – uzavretý obrys pre mnohouholník.
+     */
+    fun band(from: Double, to: Double, leftOf: (Double) -> Double, rightOf: (Double) -> Double): List<GeoPoint> {
+        val leftSide = path(from, to, leftOf)
+        if (leftSide.size < 2) return emptyList()
+        return leftSide + path(from, to, rightOf).reversed() + leftSide.first()
     }
 
     /** Bod [right] metrov napravo od vyhladenej osi v mieste [along]. */
@@ -122,6 +155,7 @@ class LaneView private constructor(
         /** Stop čiara: kúsok pred bodom manévru (stredom križovatky). */
         private const val STOP_GAP = 5.0
         private const val RAMP = 35.0
+        private const val TAPER = 45.0
         /** Krok vzoriek osi a polovica okna vyhladenia (v krokoch: ±14 m). */
         private const val STEP = 2.0
         private const val SMOOTH = 7
@@ -158,7 +192,13 @@ class LaneView private constructor(
             val good = BooleanArray(n) { LaneIcons.recommended(step.lanes[it], step.modifier) != null }
             if (good.none { it }) step.lanes.indices.forEach { good[it] = step.lanes[it].valid }
             if (good.none { it }) good.fill(true)
-            return LaneView(route, stepIndex, start, stop, end, left, w, good, axis)
+            // Okraje nášho smeru na mape (bez údajov o ceste rovno okraje pruhov – bez rozširovania).
+            val (roadLeft, roadRight) = when {
+                road == null -> left to left + n * w
+                oneWay -> -road.width / 2 to road.width / 2
+                else -> 0.0 to road.width / 2
+            }
+            return LaneView(route, stepIndex, start, stop, end, left, w, good, axis, roadLeft, roadRight)
         }
 
         private fun ease(t: Double) = t * t * (3 - 2 * t)
