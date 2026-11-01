@@ -63,8 +63,8 @@ object MapStyle {
         roadLabel = "#aeb6c7",
         placeLabel = "#dfe3ea",
         halo = "#1b2232",
-        route = "#22d39a",
-        routeCasing = "#10a06c",
+        route = KAWASAKI,
+        routeCasing = "#3a7a16",
     )
 
     // Deň ako navigácia AMap: svetlomodrý podklad, pri jazde tmavomodré cesty so svetlým okrajom.
@@ -92,8 +92,8 @@ object MapStyle {
         roadLabel = "#3d4552",
         placeLabel = "#262a31",
         halo = "#ffffff",
-        route = "#16cc8c",
-        routeCasing = "#0b8a63",
+        route = KAWASAKI,
+        routeCasing = "#33700f",
     )
 
     private const val EMPTY = """{"type":"FeatureCollection","features":[]}"""
@@ -188,11 +188,14 @@ object MapStyle {
            "layout":{"line-cap":"round","line-join":"round"},
            "paint":{"line-color":$color,"line-width":$w}}"""
 
-    /** Podfarbenie nášho smeru jazdy pri jazde (tyrkysová ako v AMap). */
-    private const val TINT = "#22585c"
+    /** Trasa v zelenej Kawasaki (Lime Green) – rovnaká ako farba auta „Kawasaki zelená“. */
+    const val KAWASAKI = "#69be28"
 
-    /** Žiarivá farba okraja trasy pri pulzovaní. */
-    private const val GLOW = "#8affdf"
+    /** Podfarbenie nášho smeru jazdy pri jazde (tmavozelená k zelenej Kawasaki). */
+    private const val TINT = "#1f4a2c"
+
+    /** Neónová limetková – okraj trasy pri pulzovaní. */
+    private const val GLOW = "#d4ff3a"
 
     /**
      * Farba okraja trasy podľa premávky; [glow] 0 až 1 = ako veľmi žiari (pulzovanie pri plynulej premávke,
@@ -362,7 +365,7 @@ object MapStyle {
                 """{"id":"route-corridor","type":"line","source":"route","minzoom":12,"maxzoom":15.5,
                 "filter":["!=",["get","foot"],1],
                 "layout":{"line-cap":"round","line-join":"round"},
-                "paint":{"line-color":"#2b5654","line-opacity":0.8,
+                "paint":{"line-color":"#2c5a22","line-opacity":0.8,
                   "line-width":${width(12 to 2, 13 to 2.5, 15 to 4.2, 16 to 7.5, 17 to 15, 18 to 30, 19 to 60, 20 to 121)}}}"""
             )
 
@@ -386,7 +389,7 @@ object MapStyle {
                 """{"id":"route-flow","type":"line","source":"route",
                 "filter":["!=",["get","foot"],1],
                 "layout":{"line-cap":"butt","line-join":"round"},
-                "paint":{"line-color":"#ffffff","line-opacity":0.6,"line-dasharray":[0,4,3],
+                "paint":{"line-color":"#f6ffe4","line-opacity":0.6,"line-dasharray":[0,4,3],
                   "line-width":${linear(5 to 1.2, 12 to 2.2, 15 to 2.5, 16 to 3, 17 to 4.5, 18 to 8.2, 19 to 16.5, 20 to 33)}}}"""
             )
             // Pri veľkom priblížení tmavá medzera medzi pruhmi trasy a čiary cesty nad trasou (ako v AMap).
@@ -394,7 +397,7 @@ object MapStyle {
                 """{"id":"route-gap","type":"line","source":"route","minzoom":17,
                 "filter":["!=",["get","foot"],1],
                 "layout":{"line-cap":"butt","line-join":"round"},
-                "paint":{"line-color":"${if (dark) "#1d5c4a" else "#178a64"}","line-opacity":0.85,
+                "paint":{"line-color":"${if (dark) "#2f6512" else "#3f8318"}","line-opacity":0.85,
                   "line-width":["interpolate",["exponential",2],["zoom"],17,1.3,22,42]}}"""
             )
             // Pruhy pred manévrom (pohľad na pruhy): nad trasou, ale pod čiarami cesty a priechodmi pre chodcov,
@@ -465,7 +468,7 @@ object MapStyle {
                 """{"id":"route-glow","type":"line","source":"route-head",
                 "layout":{"line-cap":"round","line-join":"round"},
                 "paint":{"line-width":${linear(12 to 4, 15 to 5, 16 to 6, 17 to 9, 18 to 16.5, 19 to 33, 20 to 66)},
-                  "line-gradient":["interpolate",["linear"],["line-progress"],0,"rgba(255,255,255,0.95)",0.6,"rgba(200,255,235,0.45)",1,"rgba(34,211,154,0)"]}}"""
+                  "line-gradient":["interpolate",["linear"],["line-progress"],0,"rgba(255,255,240,0.95)",0.6,"rgba(212,255,58,0.45)",1,"rgba(105,190,40,0)"]}}"""
             )
             add(
                 """{"id":"route-chevrons","type":"symbol","source":"route","minzoom":13,

@@ -1188,11 +1188,11 @@ class NavMap(
 
         /** Svetlá vlna: (poloha voči stredu vlny, farba r, g, b, priehľadnosť) – za ňou dlhší chvost. */
         private val PULSE = arrayOf(
-            doubleArrayOf(-0.18, 90.0, 230.0, 255.0, 0.0),
-            doubleArrayOf(-0.08, 110.0, 245.0, 230.0, 0.55),
-            doubleArrayOf(0.0, 255.0, 255.0, 255.0, 0.95),
-            doubleArrayOf(0.03, 160.0, 255.0, 225.0, 0.6),
-            doubleArrayOf(0.07, 90.0, 230.0, 255.0, 0.0),
+            doubleArrayOf(-0.18, 150.0, 255.0, 40.0, 0.0),
+            doubleArrayOf(-0.08, 200.0, 255.0, 60.0, 0.6),
+            doubleArrayOf(0.0, 255.0, 255.0, 230.0, 0.97),
+            doubleArrayOf(0.03, 212.0, 255.0, 58.0, 0.7),
+            doubleArrayOf(0.07, 150.0, 255.0, 40.0, 0.0),
         )
 
         /** Farebný prechod pozdĺž úseku trasy (line-progress 0 až 1) s vlnou so stredom v [center]. */

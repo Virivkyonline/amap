@@ -186,7 +186,7 @@ class DriveHud @JvmOverloads constructor(context: Context, attrs: AttributeSet? 
         val w = 6 * dp
         val at = bottom - (bottom - top) * fraction
         rect.set(x - w / 2, top, x + w / 2, bottom)
-        fill.color = Color.rgb(0x22, 0xD3, 0x9A)
+        fill.color = Color.rgb(0x69, 0xBE, 0x28)
         canvas.drawRoundRect(rect, w / 2, w / 2, fill)
         if (route != null && route.distance > 0) {
             for (span in route.traffic) {

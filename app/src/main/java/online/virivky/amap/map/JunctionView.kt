@@ -329,7 +329,7 @@ object JunctionView {
             strokeJoin = Paint.Join.ROUND
         }
         val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            shader = LinearGradient(0f, cam.h, 0f, cam.horizon, 0xFF16B57A.toInt(), 0xFF5BEA9E.toInt(), Shader.TileMode.CLAMP)
+            shader = LinearGradient(0f, cam.h, 0f, cam.horizon, 0xFF4F9A1F.toInt(), 0xFF9BE04F.toInt(), Shader.TileMode.CLAMP)
         }
         c.drawPath(path, outline)
         c.drawPath(path, fill)
