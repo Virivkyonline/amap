@@ -637,21 +637,38 @@ object MapStyle {
             // bankomaty, nemocnice a stanice – malé okrúhle ikony s názvom.
             add(
                 """{"id":"poi-base","type":"symbol","source":"omt","source-layer":"poi","minzoom":15,
-                "filter":["any",
-                  ["match",["get","class"],["fuel","parking","restaurant","fast_food","cafe","grocery","lodging","pharmacy","bank","hospital"],true,false],
-                  ["match",["get","subclass"],["supermarket","convenience","atm","charging_station","station","halt"],true,false]],
+                "filter":["all",["!=",["get","class"],"fuel"],["!=",["get","subclass"],"charging_station"],["any",
+                  ["match",["get","class"],["parking","restaurant","fast_food","cafe","grocery","lodging","pharmacy","bank","hospital",
+                    "police","toilets","campsite","drinking_water"],true,false],
+                  ["match",["get","subclass"],["supermarket","convenience","atm","station","halt","post_office","viewpoint","spring",
+                    "drinking_water","camp_site","shelter"],true,false]]],
                 "layout":{"icon-image":["case",
                     ["==",["get","subclass"],"charging_station"],"b-ev",
                     ["match",["get","subclass"],["station","halt"],true,false],"b-train",
                     ["==",["get","subclass"],"atm"],"b-atm",
                     ["match",["get","subclass"],["supermarket","convenience"],true,false],"b-shop",
+                    ["==",["get","subclass"],"post_office"],"b-post",
+                    ["==",["get","subclass"],"viewpoint"],"b-view",
+                    ["match",["get","subclass"],["spring","drinking_water"],true,false],"b-water",
+                    ["match",["get","subclass"],["camp_site","shelter"],true,false],"b-camp",
                     ["match",["get","class"],
                       "fuel","b-fuel","parking","b-parking","restaurant","b-food","fast_food","b-food","cafe","b-cafe",
-                      "grocery","b-shop","lodging","b-hotel","pharmacy","b-pharmacy","bank","b-atm","hospital","b-hospital",""]],
+                      "grocery","b-shop","lodging","b-hotel","pharmacy","b-pharmacy","bank","b-atm","hospital","b-hospital",
+                      "police","b-police","toilets","b-wc","campsite","b-camp","drinking_water","b-water",""]],
                   "icon-size":${linear(15 to 0.8, 18 to 1.0)},"symbol-sort-key":["coalesce",["get","rank"],99],
                   "text-field":$NAME,"text-font":["Noto Sans Regular"],"text-size":11,"text-offset":[0,1.2],
                   "text-anchor":"top","text-optional":true,"text-max-width":8},
                 "paint":{"text-color":"${if (dark) "#c3cad6" else "#4a5160"}","text-halo-color":"${c.halo}","text-halo-width":1.3}}"""
+            )
+            // Zastávky autobusov a električiek až pri veľkom priblížení (je ich veľa).
+            add(
+                """{"id":"poi-transit","type":"symbol","source":"omt","source-layer":"poi","minzoom":16,
+                "filter":["any",["==",["get","class"],"bus"],["match",["get","subclass"],["bus_stop","tram_stop"],true,false]],
+                "layout":{"icon-image":["case",["==",["get","subclass"],"tram_stop"],"b-tram","b-bus"],
+                  "icon-size":${linear(16 to 0.8, 18 to 1.0)},"symbol-sort-key":["coalesce",["get","rank"],99],
+                  "text-field":$NAME,"text-font":["Noto Sans Regular"],"text-size":10,"text-offset":[0,1.1],
+                  "text-anchor":"top","text-optional":true,"text-max-width":8},
+                "paint":{"text-color":"${if (dark) "#aab3c2" else "#5a6170"}","text-halo-color":"${c.halo}","text-halo-width":1.2}}"""
             )
             // Vrcholy s výškou a letiská.
             add(
@@ -692,6 +709,17 @@ object MapStyle {
                 "filter":["match",["get","class"],["city","town"],true,false],
                 "layout":{"text-field":$NAME,"text-font":["Noto Sans Bold"],"text-size":${linear(5 to 11, 10 to 15, 14 to 19)}},
                 "paint":{"text-color":"${c.placeLabel}","text-halo-color":"${c.halo}","text-halo-width":1.6}}"""
+            )
+
+            // Pumpy a nabíjačky vždy (aj keď sa prekrývajú s názvom cesty) – pri jazde sú najdôležitejšie.
+            add(
+                """{"id":"poi-fuel","type":"symbol","source":"omt","source-layer":"poi","minzoom":13,
+                "filter":["any",["==",["get","class"],"fuel"],["==",["get","subclass"],"charging_station"]],
+                "layout":{"icon-image":["case",["==",["get","subclass"],"charging_station"],"b-ev","b-fuel"],
+                  "icon-size":${linear(13 to 0.75, 18 to 1.0)},"icon-allow-overlap":true,
+                  "text-field":["step",["zoom"],"",15,["coalesce",["get","name"],["get","brand"],""]],"text-font":["Noto Sans Regular"],"text-size":11,
+                  "text-offset":[0,1.2],"text-anchor":"top","text-optional":true,"text-max-width":8},
+                "paint":{"text-color":"${if (dark) "#c3cad6" else "#4a5160"}","text-halo-color":"${c.halo}","text-halo-width":1.3}}"""
             )
 
             // Šípka manévru (biela s modrým okrajom) nad popismi.

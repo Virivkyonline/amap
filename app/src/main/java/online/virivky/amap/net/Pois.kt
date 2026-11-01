@@ -9,39 +9,64 @@ import online.virivky.amap.nav.Route
 import org.json.JSONObject
 import java.io.IOException
 import java.net.URLEncoder
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.TimeUnit
 import kotlin.math.min
 import kotlin.math.roundToInt
 
 /**
- * Vyhľadanie služieb v okolí: s kľúčom TomTom (aj živá obsadenosť nabíjačiek),
- * inak z OpenStreetMap cez Overpass.
+ * Vyhľadanie služieb v okolí: z TomTom (s kľúčom, aj živá obsadenosť nabíjačiek) a z OpenStreetMap
+ * cez Overpass naraz – každý pozná iné miesta (TomTom napr. nemá menšie pumpy), spolu bez dvojíc.
  */
 object Pois {
     private const val LIMIT = 50
+
+    /** Ako dlho ešte čakať na OpenStreetMap, keď už výsledky z TomTom máme. */
+    private const val OSM_WAIT_S = 8L
 
     /** Ako ďaleko dopredu po trase hľadáme a ako ďaleko od trasy môže služba byť. */
     private const val AHEAD = 50_000.0
     private const val MAX_OFFSET = 1000.0
 
     fun search(key: String?, category: PoiCategory, center: GeoPoint, radius: Int): List<Poi> {
-        if (key != null) {
-            try {
-                tomtom(key, category, center, radius)?.let { return it }
-            } catch (e: Exception) {
-                // TomTom nedostupný alebo kľúč bez Search API – použijeme OpenStreetMap.
+        val fromOsm = CompletableFuture.supplyAsync {
+            runCatching {
+                // V meste najprv blízke okolie, aby sme dostali najbližšie miesta, nie náhodných 50.
+                val near = osm(category, "around:${radius / 4},${center.lat},${center.lon}", center)
+                if (near.size >= 8) near else osm(category, "around:$radius,${center.lat},${center.lon}", center)
             }
         }
-        // V meste najprv blízke okolie, aby sme dostali najbližšie miesta, nie náhodných 50.
-        val near = osm(category, "around:${radius / 4},${center.lat},${center.lon}", center)
-        if (near.size >= 8) return near
-        return osm(category, "around:$radius,${center.lat},${center.lon}", center)
+        // TomTom nedostupný alebo kľúč bez Search API = len OpenStreetMap.
+        val fromTomTom = key?.let { runCatching { tomtom(it, category, center, radius) }.getOrNull() }
+        val osm = osmResult(fromOsm, fromTomTom != null)
+        if (fromTomTom == null && osm == null) throw IOException("Služby sa nepodarilo načítať")
+        return merge(fromTomTom.orEmpty(), osm.orEmpty()).sortedBy { it.distance }.take(LIMIT)
     }
+
+    /**
+     * Výsledok z OpenStreetMap; keď už máme výsledky z TomTom, čakáme naň len chvíľu (Overpass býva
+     * pomalý) – inak by sa zoznam zbytočne zdržal. Null = nepodarilo sa.
+     */
+    private fun osmResult(future: CompletableFuture<Result<List<Poi>>>, haveOther: Boolean): List<Poi>? = try {
+        (if (haveOther) future.get(OSM_WAIT_S, TimeUnit.SECONDS) else future.get()).getOrNull()
+    } catch (e: Exception) {
+        null
+    }
+
+    /** Spojí výsledky: z TomTom všetky, z OpenStreetMap tie, ktoré v TomTom nie sú (nič do 80 m). */
+    private fun merge(first: List<Poi>, second: List<Poi>): List<Poi> =
+        first + second.filter { poi -> first.none { Geo.distance(it.point, poi.point) < 80 } }
 
     /**
      * Služby pozdĺž zvyšku trasy (do 50 km), zoradené podľa vzdialenosti po trase od [traveled].
      */
     fun alongRoute(key: String?, category: PoiCategory, route: Route, traveled: Double): List<Poi> {
         val end = min(route.distance, traveled + AHEAD)
+        // OpenStreetMap pozdĺž trasy hneď na pozadí, kým sa pýtame TomTom.
+        val line = Geo.thin(route.slice(traveled, end), 400.0)
+        val fromOsm = CompletableFuture.supplyAsync {
+            runCatching { osm(category, "around:${MAX_OFFSET.toInt()}," + line.joinToString(",") { "${it.lat},${it.lon}" }, null) }
+        }
         var found: List<Poi>? = null
         if (key != null) {
             try {
@@ -56,13 +81,12 @@ object Pois {
                 }
                 found = all
             } catch (e: Exception) {
-                // Bez TomTom použijeme OpenStreetMap.
+                // Bez TomTom len OpenStreetMap.
             }
         }
-        val pois = found ?: run {
-            val line = Geo.thin(route.slice(traveled, end), 400.0)
-            osm(category, "around:${MAX_OFFSET.toInt()}," + line.joinToString(",") { "${it.lat},${it.lon}" }, null)
-        }
+        val osm = osmResult(fromOsm, found != null)
+        if (found == null && osm == null) throw IOException("Služby sa nepodarilo načítať")
+        val pois = merge(found.orEmpty(), osm.orEmpty())
         return pois.mapNotNull { poi ->
             val along = route.alongOf(poi.point, MAX_OFFSET) ?: return@mapNotNull null
             if (along < traveled - 100 || along > end + 500) null else poi.at((along - traveled).coerceAtLeast(0.0))

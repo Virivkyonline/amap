@@ -46,8 +46,8 @@ Vlastná navigácia **lech-map** pre Android, ktorá funguje aj v **Android Auto
   nad zelenou trasou aj nad pruhmi (trasa ich neprekrýva); aj priechody zakreslené len ako chodník cez cestu,
   počas navigácie sa načítavajú 3 km dopredu po trase
 - trasa, šípka odbočky aj auto idú v zákrutách **plynulým oblúkom** (nie ostrým zlomom)
-- v mape aj **body záujmu** (pumpy, nabíjačky, parkoviská, jedlo, potraviny, ubytovanie, lekárne, bankomaty,
-  nemocnice, stanice), **šípky na jednosmerkách**, **čísla domov**, **mosty** s tieňom, plochy (cintoríny,
+- v mape aj **body záujmu** (pumpy a nabíjačky vždy viditeľné, parkoviská, jedlo, potraviny, ubytovanie, lekárne,
+  bankomaty, nemocnice, stanice, pošty, polícia, WC, vyhliadky, kempy, pramene; zastávky pri veľkom priblížení), **šípky na jednosmerkách**, **čísla domov**, **mosty** s tieňom, plochy (cintoríny,
   nemocnice, školy, ihriská, lomy), **vrcholy s výškou**, skaly, kosodrevina, **lanovky a vleky**, trajekty a letiská
 - **reliéf terénu** (tieňované kopce, dá sa vypnúť v nastaveniach)
 - **tunely a podjazdy** sú na mape ako svetlejší polopriehľadný pás s prerušovanými okrajmi; v tuneli bez
@@ -176,7 +176,7 @@ sa služby hľadajú v OpenStreetMap – nájdu sa tiež, len bez obsadenosti na
 | výpočet trasy, jazdné pruhy | TomTom (s kľúčom, podľa premávky), inak OSRM (router.project-osrm.org) |
 | farby premávky na cestách | TomTom Traffic Flow (s kľúčom) |
 | dopravné udalosti | TomTom Traffic Incidents (s kľúčom) |
-| služby, nabíjačky a ich obsadenosť | TomTom Search a EV Availability (s kľúčom), inak Overpass API |
+| služby, nabíjačky a ich obsadenosť | TomTom Search a EV Availability (s kľúčom) spolu s Overpass API (OpenStreetMap) |
 | rýchlostné limity, radary, semafory | Overpass API (overpass-api.de) |
 | počasie v cieli | Open-Meteo (api.open-meteo.com) |
 | hlas | prevod textu na reč v telefóne (slovenčina, inak čeština) |

@@ -46,6 +46,14 @@ object MapIcons {
             "airport" to canvas(22f, 22f) { w, h -> badge(this, w, h, 0xFF4A6FA5.toInt()) { cx, cy, r -> plane(this, cx, cy, r) } },
             "b-hospital" to canvas(20f, 20f) { w, h -> badge(this, w, h, 0xFFE0453A.toInt()) { cx, cy, r -> cross(this, cx, cy, r) } },
             "b-train" to canvas(20f, 20f) { w, h -> badge(this, w, h, 0xFF4A6FA5.toInt()) { cx, cy, r -> train(this, cx, cy, r) } },
+            "b-bus" to canvas(18f, 18f) { w, h -> badge(this, w, h, 0xFF3D6FB6.toInt()) { cx, cy, r -> bus(this, cx, cy, r, tram = false) } },
+            "b-tram" to canvas(18f, 18f) { w, h -> badge(this, w, h, 0xFFC0392B.toInt()) { cx, cy, r -> bus(this, cx, cy, r, tram = true) } },
+            "b-post" to canvas(20f, 20f) { w, h -> badge(this, w, h, 0xFFE8A317.toInt()) { cx, cy, r -> envelope(this, cx, cy, r) } },
+            "b-police" to canvas(20f, 20f) { w, h -> badge(this, w, h, 0xFF2F4F8F.toInt()) { cx, cy, r -> shield(this, cx, cy, r) } },
+            "b-wc" to canvas(20f, 20f) { w, h -> badge(this, w, h, 0xFF6B7380.toInt()) { cx, cy, r -> label(this, cx, cy, r, "WC") } },
+            "b-view" to canvas(20f, 20f) { w, h -> badge(this, w, h, 0xFF8A5A2B.toInt()) { cx, cy, r -> binoculars(this, cx, cy, r) } },
+            "b-camp" to canvas(20f, 20f) { w, h -> badge(this, w, h, 0xFF3F8F3F.toInt()) { cx, cy, r -> tent(this, cx, cy, r) } },
+            "b-water" to canvas(20f, 20f) { w, h -> badge(this, w, h, 0xFF2F8FD6.toInt()) { cx, cy, r -> drop(this, cx, cy, r) } },
         ) + PoiCategory.entries.associate { category ->
             "b-${category.key}" to canvas(20f, 20f) { w, h ->
                 badge(this, w, h, category.color) { cx, cy, r -> PoiIcons.glyph(this, category, cx, cy, r * 1.25f, category.color) }
@@ -261,6 +269,107 @@ object MapIcons {
         }
         c.drawLine(cx - r * 0.25f, cy + r * 0.45f, cx - r * 0.42f, cy + r * 0.68f, legs)
         c.drawLine(cx + r * 0.25f, cy + r * 0.45f, cx + r * 0.42f, cy + r * 0.68f, legs)
+    }
+
+    /** Autobus (alebo električka so zberačom) spredu – zastávka. */
+    private fun bus(c: Canvas, cx: Float, cy: Float, r: Float, tram: Boolean) {
+        val p = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
+        val top = if (tram) cy - r * 0.42f else cy - r * 0.6f
+        c.drawRoundRect(RectF(cx - r * 0.48f, top, cx + r * 0.48f, cy + r * 0.48f), r * 0.14f, r * 0.14f, p)
+        val dark = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(0xCC, 0x20, 0x2A, 0x3A) }
+        c.drawRect(cx - r * 0.36f, top + r * 0.12f, cx + r * 0.36f, top + r * 0.45f, dark)
+        c.drawCircle(cx - r * 0.24f, cy + r * 0.3f, r * 0.08f, dark)
+        c.drawCircle(cx + r * 0.24f, cy + r * 0.3f, r * 0.08f, dark)
+        if (tram) {
+            val wire = Paint(p).apply {
+                style = Paint.Style.STROKE
+                strokeWidth = r * 0.1f
+                strokeCap = Paint.Cap.ROUND
+            }
+            c.drawLine(cx, top, cx + r * 0.2f, cy - r * 0.68f, wire)
+            c.drawLine(cx - r * 0.1f, cy - r * 0.68f, cx + r * 0.32f, cy - r * 0.68f, wire)
+        }
+    }
+
+    /** Obálka (pošta). */
+    private fun envelope(c: Canvas, cx: Float, cy: Float, r: Float) {
+        val p = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
+        c.drawRect(cx - r * 0.55f, cy - r * 0.36f, cx + r * 0.55f, cy + r * 0.36f, p)
+        val line = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = 0xFFE8A317.toInt()
+            style = Paint.Style.STROKE
+            strokeWidth = r * 0.1f
+            strokeJoin = Paint.Join.ROUND
+        }
+        val v = Path()
+        v.moveTo(cx - r * 0.5f, cy - r * 0.3f)
+        v.lineTo(cx, cy + r * 0.06f)
+        v.lineTo(cx + r * 0.5f, cy - r * 0.3f)
+        c.drawPath(v, line)
+    }
+
+    /** Štít (polícia). */
+    private fun shield(c: Canvas, cx: Float, cy: Float, r: Float) {
+        val p = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
+        val s = Path()
+        s.moveTo(cx, cy - r * 0.62f)
+        s.lineTo(cx + r * 0.5f, cy - r * 0.42f)
+        s.quadTo(cx + r * 0.5f, cy + r * 0.3f, cx, cy + r * 0.66f)
+        s.quadTo(cx - r * 0.5f, cy + r * 0.3f, cx - r * 0.5f, cy - r * 0.42f)
+        s.close()
+        c.drawPath(s, p)
+        c.drawCircle(cx, cy, r * 0.16f, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF2F4F8F.toInt() })
+    }
+
+    /** Krátky biely text v kruhu (WC). */
+    private fun label(c: Canvas, cx: Float, cy: Float, r: Float, text: String) {
+        val p = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+            textSize = r * 0.82f
+            typeface = Typeface.DEFAULT_BOLD
+            textAlign = Paint.Align.CENTER
+        }
+        c.drawText(text, cx, cy + r * 0.3f, p)
+    }
+
+    /** Ďalekohľad (vyhliadka). */
+    private fun binoculars(c: Canvas, cx: Float, cy: Float, r: Float) {
+        val p = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
+        c.drawCircle(cx - r * 0.3f, cy + r * 0.18f, r * 0.27f, p)
+        c.drawCircle(cx + r * 0.3f, cy + r * 0.18f, r * 0.27f, p)
+        c.drawRect(cx - r * 0.5f, cy - r * 0.45f, cx - r * 0.12f, cy + r * 0.15f, p)
+        c.drawRect(cx + r * 0.12f, cy - r * 0.45f, cx + r * 0.5f, cy + r * 0.15f, p)
+        c.drawRect(cx - r * 0.14f, cy - r * 0.2f, cx + r * 0.14f, cy + r * 0.02f, p)
+    }
+
+    /** Stan (kemp, prístrešok). */
+    private fun tent(c: Canvas, cx: Float, cy: Float, r: Float) {
+        val p = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
+        val t = Path()
+        t.moveTo(cx, cy - r * 0.6f)
+        t.lineTo(cx + r * 0.62f, cy + r * 0.48f)
+        t.lineTo(cx - r * 0.62f, cy + r * 0.48f)
+        t.close()
+        c.drawPath(t, p)
+        val door = Path()
+        door.moveTo(cx, cy - r * 0.05f)
+        door.lineTo(cx + r * 0.22f, cy + r * 0.48f)
+        door.lineTo(cx - r * 0.22f, cy + r * 0.48f)
+        door.close()
+        c.drawPath(door, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF3F8F3F.toInt() })
+    }
+
+    /** Kvapka (prameň, pitná voda). */
+    private fun drop(c: Canvas, cx: Float, cy: Float, r: Float) {
+        val p = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
+        val d = Path()
+        d.moveTo(cx, cy - r * 0.62f)
+        d.quadTo(cx + r * 0.48f, cy - r * 0.02f, cx + r * 0.4f, cy + r * 0.24f)
+        d.quadTo(cx + r * 0.3f, cy + r * 0.6f, cx, cy + r * 0.6f)
+        d.quadTo(cx - r * 0.3f, cy + r * 0.6f, cx - r * 0.4f, cy + r * 0.24f)
+        d.quadTo(cx - r * 0.48f, cy - r * 0.02f, cx, cy - r * 0.62f)
+        d.close()
+        c.drawPath(d, p)
     }
 
     /** Lietadlo zhora (letisko). */
