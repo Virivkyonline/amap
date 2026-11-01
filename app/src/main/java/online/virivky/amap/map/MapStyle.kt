@@ -257,6 +257,30 @@ object MapStyle {
                 "filter":["match",["get","class"],["path","pedestrian","track"],true,false],
                 "paint":{"line-color":"${c.path}","line-width":${width(15 to 1, 18 to 3)},"line-dasharray":[2,1.5]}}"""
             )
+            // Tunely (aj podjazdy): polopriehľadná svetlejšia cesta s tenkými prerušovanými okrajmi pod ostatnými
+            // cestami, ako v AMap – inak by trasa v tuneli išla „mimo cesty“. [scale] = podiel šírky cesty.
+            fun tunnelWidth(scale: Double) = """["interpolate",["exponential",1.5],["zoom"],""" +
+                listOf(12, 14, 15, 16, 17, 18, 19, 20).joinToString(",") { z ->
+                    fun w(stops: Array<Pair<Number, Number>>) = Math.round(widthAt(stops, z.toDouble()) * scale * 100) / 100.0
+                    """$z,["match",["get","class"],"motorway",${w(motorwayStops)},["trunk","primary"],${w(majorStops)},""" +
+                        """["secondary","tertiary"],${w(secondaryStops)},"service",${w(serviceStops)},${w(minorStops)}]"""
+                } + "]"
+            val tunnelFilter = """["all",["==",["get","brunnel"],"tunnel"],""" +
+                """["match",["get","class"],["motorway","trunk","primary","secondary","tertiary","minor","service"],true,false]]"""
+            add(
+                """{"id":"tunnel","type":"line","source":"omt","source-layer":"transportation","minzoom":12,
+                "filter":$tunnelFilter,
+                "layout":{"line-join":"round"},
+                "paint":{"line-color":"${if (dark) "#5d6880" else "#97a2b6"}","line-opacity":0.5,"line-width":${tunnelWidth(1.0)}}}"""
+            )
+            for ((id, side) in listOf("tunnel-edge-left" to -0.5, "tunnel-edge-right" to 0.5)) {
+                add(
+                    """{"id":"$id","type":"line","source":"omt","source-layer":"transportation","minzoom":14,
+                    "filter":$tunnelFilter,
+                    "paint":{"line-color":"${if (dark) "#c3cbe0" else "#5e6a80"}","line-opacity":0.85,"line-dasharray":[3,2.5],
+                      "line-width":${linear(14 to 0.8, 17 to 1.4, 20 to 3)},"line-offset":${tunnelWidth(side)}}}"""
+                )
+            }
             val casingColor = c.casing?.let { "\"$it\"" } ?: edge?.let { color(c.minor, it) }
             val motorwayCasing = c.motorwayCasing?.let { "\"$it\"" } ?: edge?.let { color(c.motorway, it) }
             if (casingColor != null) {

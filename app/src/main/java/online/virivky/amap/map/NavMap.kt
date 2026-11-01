@@ -722,7 +722,7 @@ class NavMap(
     /** Cesty vykreslené v obdĺžniku obrazovky ako úsečky s triedou (šírka vozovky ako na mape) a jednosmernosťou. */
     private fun renderedRoads(box: RectF): List<RoadPiece> {
         val pieces = ArrayList<RoadPiece>()
-        for (feature in map.queryRenderedFeatures(box, "motorway", "major", "secondary", "minor", "service")) {
+        for (feature in map.queryRenderedFeatures(box, "motorway", "major", "secondary", "minor", "service", "tunnel")) {
             val lines = when (val g = feature.geometry()) {
                 is LineString -> listOf(g.coordinates())
                 is MultiLineString -> g.coordinates()
