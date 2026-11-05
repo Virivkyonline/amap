@@ -205,6 +205,34 @@ class RoadSide(val route: Route) {
             }
         }
 
+        /**
+         * Poloha auta pri jazde bez trasy: bod [p] z GPS premietnutý na najbližšiu cestu v smere jazdy [heading]
+         * (nie priečnu, najviac [maxDistance] m od nej), v pravom pruhu ako pri navigácii, a smer tej cesty
+         * v smere jazdy. Null = cesta v smere jazdy nie je (parkovisko, pole) – vtedy ostane poloha z GPS.
+         */
+        fun snap(pieces: List<RoadPiece>, p: GeoPoint, heading: Double, maxDistance: Double): Pair<GeoPoint, Double>? {
+            var best: Pair<GeoPoint, Double>? = null
+            var bestDistance = maxDistance
+            for (piece in pieces) {
+                val diff = abs(((piece.bearing - heading) % 360 + 540) % 360 - 180)
+                val forward = diff <= 90
+                if ((if (forward) diff else 180 - diff) > SNAP_ANGLE) continue
+                val hit = Geo.pointToSegment(p, piece.a, piece.b)
+                if (hit.distance >= bestDistance) continue
+                bestDistance = hit.distance
+                val bearing = if (forward) piece.bearing else (piece.bearing + 180) % 360
+                // Pravý pruh nášho smeru: stred pravej polovice obojsmernej cesty, na jednosmernej pravý pruh.
+                val road = piece.road
+                val carriageway = if (road.oneWay) road.width else road.width / 2
+                val right = road.width / 2 - min(LANE, carriageway) / 2
+                best = Geo.offset(Geo.interpolate(piece.a, piece.b, hit.t), bearing, right) to bearing
+            }
+            return best
+        }
+
+        /** Najväčší rozdiel smeru jazdy a cesty, ešte sa auto na cestu „prilepí“. */
+        private const val SNAP_ANGLE = 35.0
+
         /** Cesta pod bodom [p] v smere [bearing] (nie priečna) najviac [maxDistance] metrov od neho. */
         fun match(pieces: List<RoadPiece>, p: GeoPoint, bearing: Double, maxDistance: Double): RoadShape? {
             val box = maxDistance / 111_320.0 * 1.5

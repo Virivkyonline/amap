@@ -53,6 +53,8 @@ Vlastná navigácia **lech-map** pre Android, ktorá funguje aj v **Android Auto
 - **tunely a podjazdy** sú na mape ako svetlejší polopriehľadný pás s prerušovanými okrajmi; v tuneli bez
   signálu ide auto po trase podľa poslednej rýchlosti a nepresné polohy (zo siete) neberie
 - počas navigácie sa mapa po posunutí prstom (aj náhodnom dotyku) po 10 s sama vráti na polohu
+- **jazda bez trasy** (ako v AMap): od ~10 km/h sa mapa otáča v smere jazdy, auto je dole a ide po ceste
+  v pravom pruhu, priblíženie podľa rýchlosti; po 1,5 min státia späť na bežnú mapu
 - auto na mape nezaostáva za skutočnou polohou: ide tam, kde podľa rýchlosti práve je (GPS meria raz
   za sekundu a s oneskorením), a zelená trasa začína plynulo pri aute (kúsok pri aute sa kreslí na každej snímke)
 - zelená trasa ostáva **vnútri cesty** (pri priblížení sa cesta rozširuje, trasa má tmavú stredovú

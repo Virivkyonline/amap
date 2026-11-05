@@ -80,6 +80,14 @@ class NavMap(
     /** Kedy používateľ naposledy sám menil priblíženie (vtedy nemeníme zoom podľa rýchlosti). */
     private var userZoomAt = 0L
     private var wasNavigating = false
+    /**
+     * Jazda bez trasy (ako „cruise“ v AMap): pri jazde autom bez navigácie sa mapa otáča v smere jazdy,
+     * auto je v dolnej časti a ide po ceste. Zostane chvíľu aj po zastavení (semafor).
+     */
+    private var cruising = false
+    private var wasCruising = false
+    private var cruiseSeenAt = -CRUISE_HOLD_MS
+    private var speedKmhNow = 0.0
     private var fittedRoute: Route? = null
     private var shownRoute: Route? = null
     /**
@@ -356,9 +364,9 @@ class NavMap(
 
     private fun zoomBy(delta: Double) {
         userZoomAt = android.os.SystemClock.elapsedRealtime()
-        if (isNavigating()) navZoom = (navZoom + delta).coerceIn(12.0, 19.0)
+        if (driving()) navZoom = (navZoom + delta).coerceIn(12.0, 19.0)
         if (follow) {
-            if (!isNavigating()) freeZoom = (freeZoom + delta).coerceIn(3.0, 19.5)
+            if (!driving()) freeZoom = (freeZoom + delta).coerceIn(3.0, 19.5)
             startFrames()
         } else {
             map.animateCamera(CameraUpdateFactory.zoomBy(delta), 250)
@@ -369,6 +377,7 @@ class NavMap(
         setFollow(true)
         userZoomAt = 0L
         if (isNavigating()) navZoom = 18.0
+        else if (cruising) navZoom = CRUISE_ZOOM
         else freeZoom = freeZoom.coerceAtLeast(15.0)
         catchUp = true
         update()
@@ -385,9 +394,9 @@ class NavMap(
         if (factor <= 0f) return
         val delta = ln(factor.toDouble()) / ln(2.0)
         userZoomAt = android.os.SystemClock.elapsedRealtime()
-        if (isNavigating()) navZoom = (navZoom + delta).coerceIn(12.0, 19.0)
+        if (driving()) navZoom = (navZoom + delta).coerceIn(12.0, 19.0)
         if (follow) {
-            if (!isNavigating()) freeZoom = (freeZoom + delta).coerceIn(3.0, 19.5)
+            if (!driving()) freeZoom = (freeZoom + delta).coerceIn(3.0, 19.5)
             camZoom = (if (camZoom.isNaN()) map.cameraPosition.zoom else camZoom) + delta
             startFrames()
         } else if (focusX < 0 || focusY < 0) map.moveCamera(CameraUpdateFactory.zoomBy(delta))
@@ -396,6 +405,9 @@ class NavMap(
 
     private fun isNavigating() =
         NavigationController.phase == Phase.NAVIGATING || NavigationController.phase == Phase.ARRIVED
+
+    /** Kamera ako pri jazde (v smere jazdy, auto dole): počas navigácie aj pri jazde bez trasy. */
+    private fun driving() = isNavigating() || cruising
 
     /** Prekreslí trasu, značky a posunie kameru podľa aktuálneho stavu. */
     fun update(animate: Boolean = true) {
@@ -407,8 +419,6 @@ class NavMap(
         }
         val nav = NavigationController
         val navigating = isNavigating()
-        // Počas navigácie sa mapa chvíľu po posunutí prstom sama vráti na polohu (aj po náhodnom dotyku).
-        if (navigating && !follow && SystemClock.uptimeMillis() - touchedAt > RECENTER_MS) setFollow(true)
         val route = nav.route
         val progress = nav.progress
         val location = LocationTracker.last
@@ -422,14 +432,31 @@ class NavMap(
         motion.followHeading = walking && Compass.heading != null
         val movement = (if (nav.estimating) snapped?.segmentBearing ?: LocationTracker.heading
         else LocationTracker.heading ?: snapped?.segmentBearing)?.toDouble()
-        val heading = if (walking) Compass.heading ?: movement else movement
-        val target = snapped?.snapped ?: location?.let { GeoPoint(it) }
+        var heading = if (walking) Compass.heading ?: movement else movement
+        var target = snapped?.snapped ?: location?.let { GeoPoint(it) }
+
+        // Jazda bez trasy: od ~10 km/h mapa v smere jazdy, ako pri navigácii.
+        val now = SystemClock.uptimeMillis()
+        val speedMps = location?.takeIf { it.hasSpeed() }?.speed?.toDouble() ?: 0.0
+        speedKmhNow = speedMps * 3.6
+        val free = nav.phase == Phase.IDLE
+        if (free && speedMps >= CRUISE_SPEED && heading != null) cruiseSeenAt = now
+        cruising = free && now - cruiseSeenAt < CRUISE_HOLD_MS
+        // Bez trasy auto ide po ceste z mapy (v pravom pruhu), nie presne podľa GPS (to býva o kus vedľa).
+        if (cruising && location != null && heading != null && speedMps >= CRUISE_SPEED) {
+            roadUnder(GeoPoint(location), heading)?.let { (point, bearing) ->
+                target = point
+                heading = bearing
+            }
+        }
+        // Počas jazdy sa mapa chvíľu po posunutí prstom sama vráti na polohu (aj po náhodnom dotyku).
+        if ((navigating || (cruising && speedMps >= CRUISE_SPEED)) && !follow && now - touchedAt > RECENTER_MS) setFollow(true)
         meIcon = when {
             walking -> "walker"
             heading != null || navigating -> "car"
             else -> "dot"
         }
-        meCompass = navigating
+        meCompass = navigating || cruising
         if (target == null) {
             s.getSourceAs<GeoJsonSource>("me")?.setGeoJson(EMPTY)
         } else if (motion.moveTo(
@@ -627,6 +654,7 @@ class NavMap(
 
         updateCamera(navigating, route, me, animate)
         wasNavigating = navigating
+        wasCruising = cruising
         updateFlow()
         updateCrossings()
     }
@@ -764,6 +792,16 @@ class NavMap(
             RoadSide.match(renderedRoads(RectF(screen.x - r, screen.y - r, screen.x + r, screen.y + r)), p, bearing, 15.0)?.let { return it }
         }
         return null
+    }
+
+    /** Cesta z mapy pod polohou [p] v smere jazdy [heading]: bod v pravom pruhu a smer cesty. */
+    private fun roadUnder(p: GeoPoint, heading: Double): Pair<GeoPoint, Double>? {
+        if (width == 0 || height == 0) return null
+        val screen = map.projection.toScreenLocation(LatLng(p.lat, p.lon))
+        if (screen.x < 0 || screen.y < 0 || screen.x > width || screen.y > height) return null
+        val r = 40 * context.resources.displayMetrics.density
+        val pieces = renderedRoads(RectF(screen.x - r, screen.y - r, screen.x + r, screen.y + r))
+        return RoadSide.snap(pieces, p, heading, SNAP_M)
     }
 
     /** Zistí z mapy cesty pod trasou pred autom, ktoré sú na obrazovke a ešte ich nepoznáme. */
@@ -1008,6 +1046,12 @@ class NavMap(
             setFollow(true)
             catchUp = true
         }
+        // Začiatok a koniec jazdy bez trasy: kamera plynulo prejde do pohľadu v smere jazdy a späť.
+        if (!navigating && cruising != wasCruising) {
+            if (cruising) navZoom = CRUISE_ZOOM
+            catchUp = true
+        }
+        val drive = navigating || cruising
         if (!navigating && NavigationController.phase == Phase.PREVIEW && route != null && route !== fittedRoute) {
             fittedRoute = route
             // Všetky varianty trasy naraz.
@@ -1017,9 +1061,9 @@ class NavMap(
         if (NavigationController.phase == Phase.IDLE) fittedRoute = null
         if (!follow || me == null) return
 
-        if (navigating) {
+        if (drive) {
             // Vo vyššej rýchlosti viac oddialiť a nakloniť, aby bolo vidieť ďalej dopredu.
-            val speed = (NavigationController.speedKmh ?: 0).toDouble()
+            val speed = if (navigating) (NavigationController.speedKmh ?: 0).toDouble() else speedKmhNow
             if (android.os.SystemClock.elapsedRealtime() - userZoomAt > 20_000) {
                 // Blízko ako AMap: v meste (do 30 km/h) priblíženie 18,6, na diaľnici (130 km/h) 16,2.
                 var zoom = (18.6 - (speed - 30).coerceAtLeast(0.0) * 0.024).coerceIn(16.0, 18.6)
@@ -1032,12 +1076,14 @@ class NavMap(
                 }
                 // Pri pohľade na pruhy bližšie, aby boli pruhy dobre vidieť.
                 if (shownLanes.isNotEmpty()) zoom = max(zoom, 18.9)
+                // Bez trasy trochu ďalej, nech je vidieť okolie a odbočky.
+                if (!navigating) zoom = min(zoom, CRUISE_ZOOM)
                 // Pešo trochu ďalej, nech je vidieť okolité chodníky.
-                if (NavigationController.travelMode == TravelMode.FOOT) zoom = 17.6
+                if (navigating && NavigationController.travelMode == TravelMode.FOOT) zoom = 17.6
                 navZoom = zoom
             }
             navTilt = if (Settings.mapPerspective == MapPerspective.THREE_D) {
-                if (NavigationController.travelMode == TravelMode.FOOT) 35.0
+                if (navigating && NavigationController.travelMode == TravelMode.FOOT) 35.0
                 else (52 + (speed - 30).coerceAtLeast(0.0) * 0.1).coerceIn(52.0, 60.0)
             } else {
                 0.0
@@ -1045,14 +1091,14 @@ class NavMap(
         }
         if (catchUp || !animate) {
             // K autu plynulo (po zapnutí sledovania), potom už kamera ide s autom po snímkach.
-            camZoom = if (navigating) navZoom else freeZoom
-            camTilt = if (navigating) navTilt else 0.0
+            camZoom = if (drive) navZoom else freeZoom
+            camTilt = if (drive) navTilt else 0.0
             if (catchUp && animate) {
                 catchFrom = map.cameraPosition
                 catchStart = SystemClock.uptimeMillis()
             } else {
                 catchFrom = null
-                cameraPosition(navigating, me)?.let { map.moveCamera(CameraUpdateFactory.newCameraPosition(it)) }
+                cameraPosition(drive, me)?.let { map.moveCamera(CameraUpdateFactory.newCameraPosition(it)) }
             }
             catchUp = false
         }
@@ -1117,7 +1163,7 @@ class NavMap(
         drawRoute()
         val me = shownMe()
         if (follow && me != null && width > 0 && height > 0) {
-            val navigating = isNavigating()
+            val navigating = driving()
             if (camZoom.isNaN()) camZoom = map.cameraPosition.zoom
             val wantedZoom = if (navigating) navZoom else freeZoom
             val wantedTilt = if (navigating) navTilt else 0.0
@@ -1284,6 +1330,13 @@ class NavMap(
         /** Ako často a ako ďaleko pred autom sa z mapy zisťujú cesty pod trasou. */
         private const val CLASSIFY_MS = 1500L
         private const val CLASSIFY_AHEAD = 600.0
+
+        /** Jazda bez trasy: od akej rýchlosti (m/s, ~10 km/h), ako dlho po zastavení a aké priblíženie. */
+        private const val CRUISE_SPEED = 2.8
+        private const val CRUISE_HOLD_MS = 90_000L
+        private const val CRUISE_ZOOM = 17.4
+        /** Najďalej od cesty (m), aby sa auto bez trasy ešte „prilepilo“ na cestu. */
+        private const val SNAP_M = 15.0
 
         /** Po koľkých ms bez dotyku sa mapa počas navigácie vráti na polohu. */
         private const val RECENTER_MS = 10_000L
